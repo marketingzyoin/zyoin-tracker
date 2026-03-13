@@ -156,17 +156,120 @@ function showPopup(){
 
 if(localStorage.getItem(CFG.submittedKey)) return;
 
-const p=document.createElement("div");
+const css = `
+#zyoinPopupOverlay{
+position:fixed;
+inset:0;
+background:rgba(0,0,0,0.7);
+backdrop-filter:blur(6px);
+display:flex;
+align-items:center;
+justify-content:center;
+z-index:999999;
+font-family:Inter,system-ui,sans-serif;
+}
 
-p.style.cssText="position:fixed;bottom:20px;right:20px;background:#111;color:#fff;padding:20px;width:300px;border-radius:10px;z-index:99999;font-family:sans-serif";
+#zyoinPopup{
+background:#111;
+color:#fff;
+padding:30px;
+border-radius:16px;
+width:380px;
+box-shadow:0 20px 60px rgba(0,0,0,0.5);
+animation:popupFade .25s ease;
+}
 
-p.innerHTML=`<h3>Talk to Zyoin</h3>
-<input id="zname" placeholder="Name" style="width:100%;margin:5px 0;padding:8px">
-<input id="zemail" placeholder="Work Email" style="width:100%;margin:5px 0;padding:8px">
-<input id="zphone" placeholder="Phone" style="width:100%;margin:5px 0;padding:8px">
-<button id="zbtn" style="width:100%;padding:10px;margin-top:5px">Submit</button>`;
+#zyoinPopup h3{
+font-size:22px;
+margin-bottom:8px;
+}
 
-document.body.appendChild(p);
+#zyoinPopup p{
+font-size:14px;
+color:#aaa;
+margin-bottom:18px;
+line-height:1.5;
+}
+
+#zyoinPopup input{
+width:100%;
+background:#1b1b1b;
+border:1px solid #333;
+border-radius:8px;
+padding:12px;
+margin-bottom:10px;
+color:#fff;
+font-size:14px;
+outline:none;
+}
+
+#zyoinPopup input::placeholder{
+color:#777;
+}
+
+#zyoinPopup button{
+width:100%;
+background:#fff;
+color:#000;
+border:none;
+border-radius:10px;
+padding:12px;
+font-weight:600;
+font-size:14px;
+cursor:pointer;
+transition:all .2s;
+}
+
+#zyoinPopup button:hover{
+background:#e8e8e8;
+}
+
+#zyoinClose{
+position:absolute;
+top:18px;
+right:20px;
+color:#888;
+cursor:pointer;
+font-size:18px;
+}
+
+@keyframes popupFade{
+from{opacity:0;transform:scale(.92)}
+to{opacity:1;transform:scale(1)}
+}
+`;
+
+const style=document.createElement("style");
+style.innerHTML=css;
+document.head.appendChild(style);
+
+const overlay=document.createElement("div");
+overlay.id="zyoinPopupOverlay";
+
+overlay.innerHTML=`
+<div id="zyoinPopup">
+
+<div id="zyoinClose">✕</div>
+
+<h3>Looking to hire exceptional talent?</h3>
+
+<p>AI-augmented recruitment built for speed and precision.  
+Drop your details — a Zyoin expert will reach out within 24 hours.</p>
+
+<input id="zname" placeholder="Your name">
+<input id="zemail" placeholder="Work email">
+<input id="zphone" placeholder="Company name">
+
+<button id="zbtn">Get a Free Consultation →</button>
+
+</div>
+`;
+
+document.body.appendChild(overlay);
+
+document.getElementById("zyoinClose").onclick=function(){
+overlay.remove();
+};
 
 document.getElementById("zbtn").onclick=function(){
 
@@ -178,7 +281,12 @@ localStorage.setItem(CFG.submittedKey,true);
 
 send();
 
-p.innerHTML="Thanks! We'll contact you.";
+document.getElementById("zyoinPopup").innerHTML=
+"<h3>Thank you</h3><p>Our team will reach out within 24 hours.</p>";
+
+setTimeout(()=>{
+overlay.remove();
+},2500);
 
 };
 
