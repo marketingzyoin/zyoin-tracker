@@ -1,19 +1,11 @@
 (function(){
 
-/* =========================
-CONFIG
-========================= */
-
 const CFG={
 endpoint:"https://script.google.com/macros/s/AKfycbwM0xeynyrYW2v73ztBXBe5D3ld2ODpjOj00nULpbNB0yt1vIoBvD1H-yLXvIwNHY1a/exec",
 visitorKey:"zyoin_vid",
 pagesKey:"zyoin_pages",
 submittedKey:"zyoin_submitted"
 };
-
-/* =========================
-STATE
-========================= */
 
 let V={
 visitorId:null,
@@ -27,72 +19,14 @@ linkedin:null,
 pages:[],
 scroll:0,
 time:0,
-email:null,
 name:null,
+email:null,
 phone:null
 };
 
-/* =========================
-CSS FOR POPUP
-========================= */
-
-const css=`
-#zyoinPopup{
-position:fixed;
-bottom:20px;
-right:20px;
-background:#111;
-color:#fff;
-padding:20px;
-border-radius:10px;
-width:300px;
-font-family:sans-serif;
-z-index:99999;
-box-shadow:0 10px 30px rgba(0,0,0,0.4)
-}
-
-#zyoinPopup input{
-width:100%;
-margin:5px 0;
-padding:8px;
-border-radius:5px;
-border:1px solid #444;
-background:#222;
-color:#fff
-}
-
-#zyoinPopup button{
-margin-top:8px;
-width:100%;
-padding:10px;
-border:none;
-background:#fff;
-color:#000;
-border-radius:5px;
-cursor:pointer
-}
-
-#zyoinClose{
-position:absolute;
-top:5px;
-right:10px;
-cursor:pointer;
-color:#999
-}
-`;
-
-function injectCSS(){
-const s=document.createElement("style");
-s.innerHTML=css;
-document.head.appendChild(s);
-}
-
-/* =========================
-VISITOR ID
-========================= */
+/* Visitor fingerprint */
 
 function fingerprint(){
-
 const raw=[
 navigator.userAgent,
 navigator.language,
@@ -100,43 +34,28 @@ screen.width,
 screen.height,
 Intl.DateTimeFormat().resolvedOptions().timeZone
 ].join("|");
-
 return btoa(raw).substring(0,16);
-
 }
 
 function getVisitorId(){
-
 let id=localStorage.getItem(CFG.visitorKey);
-
 if(!id){
 id=fingerprint();
 localStorage.setItem(CFG.visitorKey,id);
 }
-
 return id;
-
 }
 
-/* =========================
-PAGE TRACKING
-========================= */
+/* Page tracking */
 
 function trackPages(){
-
 let pages=JSON.parse(localStorage.getItem(CFG.pagesKey)||"[]");
-
 pages.push(location.pathname);
-
 localStorage.setItem(CFG.pagesKey,JSON.stringify(pages));
-
 V.pages=pages;
-
 }
 
-/* =========================
-SCROLL + TIME
-========================= */
+/* Behaviour */
 
 function behaviour(){
 
@@ -159,9 +78,7 @@ V.time=Math.round((Date.now()-start)/1000);
 
 }
 
-/* =========================
-IP DETECTION
-========================= */
+/* Company detection */
 
 async function detectIP(){
 
@@ -186,10 +103,6 @@ buildLinkedin();
 
 }
 
-/* =========================
-ASN
-========================= */
-
 async function detectASN(){
 
 try{
@@ -208,10 +121,6 @@ buildLinkedin();
 
 }
 
-/* =========================
-LINKEDIN
-========================= */
-
 function buildLinkedin(){
 
 if(!V.company) return;
@@ -225,56 +134,7 @@ V.linkedin="https://linkedin.com/company/"+slug;
 
 }
 
-/* =========================
-POPUP
-========================= */
-
-function showPopup(){
-
-if(localStorage.getItem(CFG.submittedKey)==="true") return;
-
-injectCSS();
-
-const p=document.createElement("div");
-p.id="zyoinPopup";
-
-p.innerHTML=`
-<div id="zyoinClose">✕</div>
-<h3>Hiring this quarter?</h3>
-<p>Talk to a Zyoin hiring expert.</p>
-
-<input id="zyoinName" placeholder="Name">
-<input id="zyoinEmail" placeholder="Work Email">
-<input id="zyoinPhone" placeholder="Phone">
-
-<button id="zyoinSubmit">Request Consultation</button>
-`;
-
-document.body.appendChild(p);
-
-document.getElementById("zyoinClose").onclick=function(){
-p.remove();
-};
-
-document.getElementById("zyoinSubmit").onclick=function(){
-
-V.name=document.getElementById("zyoinName").value;
-V.email=document.getElementById("zyoinEmail").value;
-V.phone=document.getElementById("zyoinPhone").value;
-
-localStorage.setItem(CFG.submittedKey,"true");
-
-send(true);
-
-p.innerHTML="<p>Thanks! Our team will contact you.</p>";
-
-};
-
-}
-
-/* =========================
-LEAD SCORE
-========================= */
+/* Lead scoring */
 
 function score(){
 
@@ -290,9 +150,41 @@ return s;
 
 }
 
-/* =========================
-PAYLOAD
-========================= */
+/* Popup */
+
+function showPopup(){
+
+if(localStorage.getItem(CFG.submittedKey)) return;
+
+const p=document.createElement("div");
+
+p.style.cssText="position:fixed;bottom:20px;right:20px;background:#111;color:#fff;padding:20px;width:300px;border-radius:10px;z-index:99999;font-family:sans-serif";
+
+p.innerHTML=`<h3>Talk to Zyoin</h3>
+<input id="zname" placeholder="Name" style="width:100%;margin:5px 0;padding:8px">
+<input id="zemail" placeholder="Work Email" style="width:100%;margin:5px 0;padding:8px">
+<input id="zphone" placeholder="Phone" style="width:100%;margin:5px 0;padding:8px">
+<button id="zbtn" style="width:100%;padding:10px;margin-top:5px">Submit</button>`;
+
+document.body.appendChild(p);
+
+document.getElementById("zbtn").onclick=function(){
+
+V.name=document.getElementById("zname").value;
+V.email=document.getElementById("zemail").value;
+V.phone=document.getElementById("zphone").value;
+
+localStorage.setItem(CFG.submittedKey,true);
+
+send();
+
+p.innerHTML="Thanks! We'll contact you.";
+
+};
+
+}
+
+/* Payload */
 
 function payload(){
 
@@ -313,40 +205,20 @@ currentPage:location.pathname,
 timeOnPage:V.time,
 scrollDepth:V.scroll,
 engagementScore:score(),
-source:"Zyoin Tracker",
-slackUrl:CFG.slackUrl
+source:"Zyoin Tracker"
 };
 
 }
 
-/* =========================
-SEND
-========================= */
+/* Send */
 
 function send(){
 
-const p=payload();
-
-if(navigator.sendBeacon){
-
-navigator.sendBeacon(CFG.endpoint,JSON.stringify(p));
-
-}else{
-
-fetch(CFG.endpoint,{
-method:"POST",
-mode:"no-cors",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify(p)
-});
+navigator.sendBeacon(CFG.endpoint,JSON.stringify(payload()));
 
 }
 
-}
-
-/* =========================
-INIT
-========================= */
+/* Init */
 
 window.addEventListener("load",function(){
 
@@ -361,7 +233,6 @@ await detectIP();
 await detectASN();
 
 setTimeout(showPopup,45000);
-
 setTimeout(send,60000);
 
 },2000);
