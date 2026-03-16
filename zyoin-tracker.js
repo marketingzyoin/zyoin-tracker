@@ -42,7 +42,7 @@ var D = {
   page:'', pages:[], ref:'', utm:'',
   returning:false, visits:1,
   score:0, quality:'',
-  tier:1, sent:false, enrichedDomain:'',
+  tier:1, sent:false, enrichedDomain:'', companyVerified:false,
   // Device & identity
   visitorId:'', timezone:'', screenW:0, screenH:0, lang:'',
 };
@@ -106,39 +106,31 @@ function markSubmitted(){
 //                → Brandfetch → real LinkedIn URL
 // This is the most reliable way to get company data without asking for it.
 function enrichFromEmail(email){
-  if(!email || email.indexOf('@') < 0) return;
+  if(!email || email.indexOf('@') < 0) return Promise.resolve();
   var domain = email.split('@')[1].toLowerCase();
-  // Skip free email providers — no company data available
-  if(FREE_MAIL.some(function(f){ return domain === f; })) return;
-  // Already enriched from this domain? Skip
-  if(D.enrichedDomain === domain) return;
+  if(FREE_MAIL.some(function(f){ return domain === f; })) return Promise.resolve();
+  if(D.enrichedDomain === domain) return Promise.resolve();
   D.enrichedDomain = domain;
   console.log('[Zyoin] enriching from email domain:', domain);
-  // Use Clearbit to get company name, logo from domain
-  fetch('https://autocomplete.clearbit.com/v1/companies/suggest?query=' + encodeURIComponent(domain))
+  return fetch('https://autocomplete.clearbit.com/v1/companies/suggest?query=' + encodeURIComponent(domain))
     .then(function(r){ return r.json(); })
     .then(function(data){
-      if(!data || !data.length) return;
-      // Find the result whose domain matches exactly
+      if(!data || !data.length) return fetchLinkedIn(domain, D.company);
       var co = null;
       for(var i=0; i<data.length; i++){
         if(data[i].domain && data[i].domain.toLowerCase() === domain){ co=data[i]; break; }
       }
-      if(!co) co = data[0]; // fallback to first result
-      // Email domain enrichment always wins over IP org name
-      // Only preserve manually typed company name (D.coForm)
-      if(co.name && !D.coForm) D.company = co.name;
+      if(!co) co = data[0];
+      if(co.name && !D.coForm){ D.company = co.name; D.companyVerified = true; }
       if(co.domain){
         D.website = 'https://' + co.domain;
         D.logo    = 'https://logo.clearbit.com/' + co.domain;
       }
       console.log('[Zyoin] Email enriched:', D.company, D.website);
-      // Now get real LinkedIn from Brandfetch
-      fetchLinkedIn(co.domain || domain, co.name || D.company);
+      return fetchLinkedIn(co.domain || domain, co.name || D.company);
     })
     .catch(function(){
-      // Clearbit failed — try Brandfetch directly with domain
-      fetchLinkedIn(domain, D.company);
+      return fetchLinkedIn(domain, D.company);
     });
 }
 
@@ -173,7 +165,7 @@ function enrichCompany(name){
 
 // Fetch real LinkedIn company URL via Brandfetch (free, no key required)
 function fetchLinkedIn(domain, companyName){
-  fetch('https://api.brandfetch.io/v2/brands/' + encodeURIComponent(domain))
+  return fetch('https://api.brandfetch.io/v2/brands/' + encodeURIComponent(domain))
     .then(function(r){ return r.json(); })
     .then(function(brand){
       // Brandfetch returns links array with type: "linkedin"
@@ -306,7 +298,7 @@ function initCapture(){
     if(fn.indexOf('name')>-1 && fn.indexOf('company')<0 && fn.indexOf('last')<0) D.name=val;
     if(el.type==='tel' || fn.indexOf('phone')>-1 || fn.indexOf('mobile')>-1) D.phone=val;
     if(fn.indexOf('company')>-1 || fn.indexOf('organisation')>-1){
-      D.coForm=val; D.company=val;
+      D.coForm=val; D.company=val; D.companyVerified=true;
       enrichCompany(val); // Clearbit lookup on typed company name
     }
   }, true);
@@ -324,7 +316,10 @@ function initCapture(){
   document.addEventListener('submit', function(){
     D.form = true;
     markSubmitted();
-    if(isWorkEmail(D.email)) sendData(D.tier, true);
+    if(isWorkEmail(D.email)){
+      // Wait for enrichment to complete so company/linkedin/website are populated
+      enrichFromEmail(D.email).then(function(){ sendData(D.tier, true); });
+    }
   }, true);
 }
 
@@ -499,8 +494,9 @@ function buildPopup(){
   var zForm     = inner.querySelector('.z-form');
   var zTy       = inner.querySelector('.z-thanks');
 
-  // Personalise headline from IP company (residential visitors get generic)
-  if(D.company && !D.residential){
+  // Only personalise headline when company is verified (from email/form)
+  // Never show IP org name — it's the ISP, not the actual company
+  if(D.companyVerified && D.company){
     fHeadline.innerHTML = 'Hiring at<br/>' + D.company + '?';
   }
   if(D.email) fEmail.value = D.email;
@@ -510,9 +506,11 @@ function buildPopup(){
     var em = fEmail.value.trim();
     if(em && em.indexOf('@') > 0){
       enrichFromEmail(em);
-      // Update headline once Clearbit resolves the real company name
+      // Update headline once Clearbit resolves real company from email domain
       setTimeout(function(){
-        if(D.company && fHeadline) fHeadline.innerHTML = 'Hiring at<br/>' + D.company + '?';
+        if(D.companyVerified && D.company && fHeadline){
+          fHeadline.innerHTML = 'Hiring at<br/>' + D.company + '?';
+        }
       }, 1500);
       // Expand name + phone fields (progressive disclosure)
       if(fExtra.style.display === 'none'){
@@ -543,7 +541,9 @@ function buildPopup(){
     D.form  = true;
     enrichFromEmail(em);
     markSubmitted();
-    if(isWorkEmail(em)) sendData(D.tier, true);
+    if(isWorkEmail(em)){
+      enrichFromEmail(em).then(function(){ sendData(D.tier, true); });
+    }
     zForm.style.display = 'none';
     zTy.style.display   = 'block';
     setTimeout(close, 2800);
@@ -583,7 +583,9 @@ function buildSlideIn(){
     D.form  = true;
     enrichFromEmail(em); // enrich company from email domain
     markSubmitted();
-    if(isWorkEmail(em)) sendData(D.tier, true);
+    if(isWorkEmail(em)){
+      enrichFromEmail(em).then(function(){ sendData(D.tier, true); });
+    }
     sForm.style.display   = 'none';
     sThanks.style.display = 'block';
     setTimeout(function(){ el.classList.remove('on'); }, 2500);
