@@ -12,6 +12,22 @@
 var SHEETS = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.sheets) || '';
 var SLACK  = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.slack)  || '';
 
+// ── BLOCKED IPs ──────────────────────────────────────────────
+// Add your office/team IPs here — tracker will silently exit for these.
+// To find your IP: visit https://ipinfo.io and copy the IP shown.
+var BLOCKED_IPS = [
+  '157.20.14.76',   // replace with your actual office IP
+  // '103.x.x.x', // add more IPs as needed
+];
+
+// ── BLOCKED IPs ──────────────────────────────────────────────
+// Add your office/team IPs here — tracker will silently exit for these.
+// To find your IP: visit https://ipinfo.io and copy the IP shown.
+var BLOCKED_IPS = [
+  '0.0.0.0',   // replace with your actual office IP
+  // '103.x.x.x', // add more IPs as needed
+];
+
 // ── TRACKED PAGES ────────────────────────────────────────────
 var TIER1 = ['/permanent-hiring','/leadership-hiring','/global-hiring','/contact-us','/hire-talent'];
 var TIER2 = ['/rpo','/contract-hiring','/managed-recruitment-service','/talent-intelligence','/hire-meetups'];
@@ -42,7 +58,7 @@ var D = {
   page:'', pages:[], ref:'', utm:'',
   returning:false, visits:1,
   score:0, quality:'',
-  tier:1, sent:false, enrichedDomain:'', companyVerified:false,
+  tier:1, sent:false, enrichedDomain:'', companyVerified:false, blocked:false, blocked:false,
   // Device & identity
   visitorId:'', timezone:'', screenW:0, screenH:0, lang:'',
 };
@@ -208,6 +224,15 @@ function fallbackLinkedIn(name){
 // Fallback: Abstract API (free, no key needed, CORS-friendly)
 // ip-api.com removed — returns 403 Forbidden from browser requests
 function getIP(){
+  function checkBlocked(ip){
+    if(BLOCKED_IPS.indexOf(ip) > -1){
+      console.log('[Zyoin] blocked IP — tracking disabled');
+      D.blocked = true;
+      return true;
+    }
+    return false;
+  }
+
   function apply(org, city, country){
     var raw = (org||'').replace(/^AS\d+\s*/,'').trim();
     var chk = raw.toLowerCase();
@@ -228,12 +253,18 @@ function getIP(){
 
   return fetch('https://ipinfo.io/json')
     .then(function(r){ return r.json(); })
-    .then(function(d){ apply(d.org, d.city, d.country); })
+    .then(function(d){
+      if(checkBlocked(d.ip)) return Promise.reject('blocked');
+      apply(d.org, d.city, d.country);
+    })
     .catch(function(){
       // Fallback: ipapi.co — free, CORS-friendly, no key required
       return fetch('https://ipapi.co/json/')
         .then(function(r){ return r.json(); })
-        .then(function(d){ apply(d.org, d.city, d.country_name); })
+        .then(function(d){
+          if(checkBlocked(d.ip)) return Promise.reject('blocked');
+          apply(d.org, d.city, d.country_name);
+        })
         .catch(function(){ console.log('[Zyoin] IP lookup failed'); });
     });
 }
@@ -355,6 +386,7 @@ function sendData(tier, fromForm){
   var ms = MIN_SCORE[t] || 10;
 
   console.log('[Zyoin] send tier='+t+' score='+s+' min='+ms+' fromForm='+fromForm);
+  if(D.blocked){ console.log('[Zyoin] blocked IP — data not sent'); return; }
   if(s < ms){ console.log('[Zyoin] score too low, skipping'); return; }
   if(!fromForm && D.sent){ console.log('[Zyoin] already sent, skipping'); return; }
   if(!fromForm) D.sent = true;
