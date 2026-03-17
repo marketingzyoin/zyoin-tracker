@@ -11,6 +11,7 @@
 // URLs are set in Webflow Head Code via window.ZYOIN_CONFIG — not stored here
 var SHEETS = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.sheets) || '';
 var SLACK  = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.slack)  || '';
+var HUNTER = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.hunter) || '';
 
 // ── BLOCKED IPs ──────────────────────────────────────────────
 // Add your office/team IPs here — tracker will silently exit for these.
@@ -127,7 +128,41 @@ function enrichFromEmail(email){
   if(FREE_MAIL.some(function(f){ return domain === f; })) return Promise.resolve();
   if(D.enrichedDomain === domain) return Promise.resolve();
   D.enrichedDomain = domain;
-  console.log('[Zyoin] enriching from email domain:', domain);
+  console.log('[Zyoin] enriching from domain:', domain);
+
+  // ── Hunter Company Enrichment (primary — requires API key) ──
+  if(HUNTER){
+    return fetch('https://api.hunter.io/v2/companies/find?domain=' + encodeURIComponent(domain) + '&api_key=' + HUNTER)
+      .then(function(r){ return r.json(); })
+      .then(function(res){
+        var co = res.data;
+        if(!co) return enrichFallback(domain); // no data → fall back to Clearbit
+        // Company name
+        if(co.name && !D.coForm){ D.company = co.name; D.companyVerified = true; }
+        // Website
+        if(co.website || co.domain){
+          D.website = co.website || ('https://' + co.domain);
+        }
+        // LinkedIn — Hunter returns linkedin.handle e.g. "stripe"
+        if(co.linkedin && co.linkedin.handle){
+          D.linkedin = 'https://www.linkedin.com/company/' + co.linkedin.handle;
+        } else if(co.linkedin && typeof co.linkedin === 'string' && co.linkedin.indexOf('linkedin') > -1){
+          D.linkedin = co.linkedin;
+        }
+        // Logo via Clearbit (free, no key)
+        var logoD = co.domain || domain;
+        D.logo = 'https://logo.clearbit.com/' + logoD;
+        console.log('[Zyoin] Hunter enriched:', D.company, D.website, D.linkedin);
+      })
+      .catch(function(){ return enrichFallback(domain); });
+  }
+
+  // ── No Hunter key — fall back to Clearbit + Brandfetch ──────
+  return enrichFallback(domain);
+}
+
+// Fallback enrichment using Clearbit autocomplete + Brandfetch
+function enrichFallback(domain){
   return fetch('https://autocomplete.clearbit.com/v1/companies/suggest?query=' + encodeURIComponent(domain))
     .then(function(r){ return r.json(); })
     .then(function(data){
@@ -142,7 +177,7 @@ function enrichFromEmail(email){
         D.website = 'https://' + co.domain;
         D.logo    = 'https://logo.clearbit.com/' + co.domain;
       }
-      console.log('[Zyoin] Email enriched:', D.company, D.website);
+      console.log('[Zyoin] Clearbit fallback:', D.company, D.website);
       return fetchLinkedIn(co.domain || domain, co.name || D.company);
     })
     .catch(function(){
