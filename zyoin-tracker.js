@@ -11,7 +11,11 @@
 // URLs are set in Webflow Head Code via window.ZYOIN_CONFIG — not stored here
 var SHEETS = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.sheets) || '';
 var SLACK  = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.slack)  || '';
-var HUNTER = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.hunter) || '';
+// Enrichment API keys — safe to store here (read-only, public-facing keys)
+var HUNTER     = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.hunter)     || '';
+var ABSTRACT   = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.abstract)   || '';
+var ABSTRACTIP = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.abstractip) || '';
+var TECHCHECK  = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.techcheck)  || '';
 
 // ── BLOCKED IPs ──────────────────────────────────────────────
 // Add your office/team IPs here — tracker will silently exit for these.
@@ -161,28 +165,94 @@ function enrichFromEmail(email){
   return enrichFallback(domain);
 }
 
-// Fallback enrichment using Clearbit autocomplete + Brandfetch
+// ── ENRICHMENT WATERFALL ────────────────────────────────────
+// Tries each source in order until company name is found.
+// Clearbit (free) → AbstractAPI → TechnologyChecker → Brandfetch → slug
+// Stops as soon as company + linkedin + website are all found
+function isEnriched(){
+  return !!(D.company && D.companyVerified && D.linkedin && D.website);
+}
 function enrichFallback(domain){
+  if(isEnriched()) return Promise.resolve();
+  // Step 1: Clearbit autocomplete (free, no key)
   return fetch('https://autocomplete.clearbit.com/v1/companies/suggest?query=' + encodeURIComponent(domain))
     .then(function(r){ return r.json(); })
     .then(function(data){
-      if(!data || !data.length) return fetchLinkedIn(domain, D.company);
       var co = null;
-      for(var i=0; i<data.length; i++){
-        if(data[i].domain && data[i].domain.toLowerCase() === domain){ co=data[i]; break; }
+      if(data && data.length){
+        for(var i=0; i<data.length; i++){
+          if(data[i].domain && data[i].domain.toLowerCase() === domain){ co=data[i]; break; }
+        }
+        if(!co) co = data[0];
       }
-      if(!co) co = data[0];
-      if(co.name && !D.coForm){ D.company = co.name; D.companyVerified = true; }
-      if(co.domain){
-        D.website = 'https://' + co.domain;
-        D.logo    = 'https://logo.clearbit.com/' + co.domain;
+      if(co && co.name){
+        if(!D.coForm){ D.company = co.name; D.companyVerified = true; }
+        if(co.domain){
+          D.website = 'https://' + co.domain;
+          D.logo    = 'https://logo.clearbit.com/' + co.domain;
+        }
+        console.log('[Zyoin] Clearbit:', D.company);
+        return fetchLinkedIn(co.domain || domain, D.company);
       }
-      console.log('[Zyoin] Clearbit fallback:', D.company, D.website);
-      return fetchLinkedIn(co.domain || domain, co.name || D.company);
+      // Already have everything from Clearbit — stop here
+      if(isEnriched()) return;
+      // Still missing LinkedIn or other fields — try next source
+      if(ABSTRACT) return enrichAbstract(domain);
+      if(TECHCHECK) return enrichTechCheck(domain);
+      return fetchLinkedIn(domain, D.company);
     })
     .catch(function(){
+      if(ABSTRACT) return enrichAbstract(domain);
+      if(TECHCHECK) return enrichTechCheck(domain);
       return fetchLinkedIn(domain, D.company);
     });
+}
+
+// AbstractAPI — only called if Clearbit didn't get everything
+function enrichAbstract(domain){
+  if(isEnriched()) return Promise.resolve();
+  return fetch('https://companyenrichment.abstractapi.com/v1/?api_key=' + ABSTRACT + '&domain=' + encodeURIComponent(domain))
+    .then(function(r){ return r.json(); })
+    .then(function(co){
+      if(co && co.name){
+        if(!D.coForm){ D.company = co.name; D.companyVerified = true; }
+        if(co.domain) D.website = 'https://' + co.domain;
+        if(co.linkedin_url) D.linkedin = co.linkedin_url.indexOf('http') === 0 ? co.linkedin_url : 'https://' + co.linkedin_url;
+        D.logo = 'https://logo.clearbit.com/' + domain;
+        console.log('[Zyoin] AbstractAPI:', D.company, D.linkedin);
+        if(!D.linkedin) return fetchLinkedIn(domain, D.company);
+      } else {
+        if(TECHCHECK) return enrichTechCheck(domain);
+        return fetchLinkedIn(domain, D.company);
+      }
+    })
+    .catch(function(){
+      if(TECHCHECK) return enrichTechCheck(domain);
+      return fetchLinkedIn(domain, D.company);
+    });
+}
+
+// TechnologyChecker — only called if previous sources didn't complete
+function enrichTechCheck(domain){
+  if(isEnriched()) return Promise.resolve();
+  return fetch('https://api.technologychecker.io/v1/company?domain=' + encodeURIComponent(domain), {
+    headers: { 'Authorization': 'Bearer ' + TECHCHECK }
+  })
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      var co = Array.isArray(res) ? res[0] : res;
+      if(co && co.name){
+        if(!D.coForm){ D.company = co.name; D.companyVerified = true; }
+        if(co.website) D.website = co.website.indexOf('http') === 0 ? co.website : 'https://' + co.website;
+        if(co.linkedin_url) D.linkedin = co.linkedin_url.indexOf('http') === 0 ? co.linkedin_url : 'https://' + co.linkedin_url;
+        D.logo = 'https://logo.clearbit.com/' + domain;
+        console.log('[Zyoin] TechCheck:', D.company, D.linkedin);
+        if(!D.linkedin) return fetchLinkedIn(domain, D.company);
+      } else {
+        return fetchLinkedIn(domain, D.company);
+      }
+    })
+    .catch(function(){ return fetchLinkedIn(domain, D.company); });
 }
 
 // ── COMPANY ENRICHMENT ──────────────────────────────────────
@@ -252,6 +322,36 @@ function fallbackLinkedIn(name){
     .replace(/-+/g,'-');
   D.linkedin = 'https://www.linkedin.com/company/' + slug;
   console.log('[Zyoin] LinkedIn (slug fallback):', D.linkedin);
+}
+
+// ── ABSTRACT IP INTELLIGENCE ─────────────────────────────────
+// Uses AbstractAPI IP Intelligence to get better company data from IP
+// especially useful for visitors who never fill the form
+function enrichFromIP(ip){
+  if(!ip || !ABSTRACTIP) return;
+  fetch('https://ipgeolocation.abstractapi.com/v1/?api_key=' + ABSTRACTIP + '&ip_address=' + ip)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      // Only use if we got a real org/company (not residential)
+      var org = (d.connection && d.connection.organization_name) || '';
+      var isp = (d.connection && d.connection.isp_name) || '';
+      var name = org || isp || '';
+      if(!name) return;
+      var chk = name.toLowerCase();
+      var res = RESIDENTIAL.some(function(s){ return chk.indexOf(s) > -1; });
+      if(res) return; // skip residential ISPs
+      // AbstractAPI gives better org names than ipinfo for many Indian companies
+      if(!D.coForm && !D.companyVerified){
+        D.company = name;
+        D.isp     = name;
+        enrichCompany(name); // try Clearbit to clean up the name
+      }
+      // Better city/country if we didn't get it from ipinfo
+      if(!D.city    && d.city)    D.city    = d.city;
+      if(!D.country && d.country) D.country = d.country;
+      console.log('[Zyoin] AbstractIP:', name, D.city, D.country);
+    })
+    .catch(function(){});
 }
 
 // ── IP LOOKUP ────────────────────────────────────────────────
