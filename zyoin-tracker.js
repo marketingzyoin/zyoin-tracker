@@ -16,7 +16,7 @@ var SLACK  = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.slack)  || '';
 // Add your office/team IPs here — tracker will silently exit for these.
 // To find your IP: visit https://ipinfo.io and copy the IP shown.
 var BLOCKED_IPS = [
-  '157.20.14.76',   // replace with your actual office IP
+  '0.0.0.0',   // replace with your actual office IP
   // '103.x.x.x', // add more IPs as needed
 ];
 
@@ -58,7 +58,7 @@ var D = {
   page:'', pages:[], ref:'', utm:'',
   returning:false, visits:1,
   score:0, quality:'',
-  tier:1, sent:false, enrichedDomain:'', companyVerified:false, blocked:false, blocked:false,
+  tier:1, sent:false, enrichedDomain:'', companyVerified:false, blocked:false,
   // Device & identity
   visitorId:'', timezone:'', screenW:0, screenH:0, lang:'',
 };
@@ -501,7 +501,7 @@ function buildPopup(){
     '<button class="z-close">&times;</button>' +
     '<div class="z-form">' +
       '<div class="z-badge"><span class="z-dot"></span>Free Consultation</div>' +
-      '<h3 class="z-headline">Looking to hire<br/>exceptional talent?</h3>' +
+      '<h3>Looking to hire<br/>exceptional talent?</h3>' +
       '<p class="z-sub">AI-augmented recruitment built for speed and precision. Drop your details — a Zyoin expert will reach out within 24&nbsp;hours.</p>' +
       '<p class="z-hint">No spam. A real person will reach out.</p>' +
       '<input class="z-field" data-zf="email" type="email" placeholder="Your work email"/>' +
@@ -520,17 +520,13 @@ function buildPopup(){
   ov.appendChild(inner);
   document.body.appendChild(ov);
 
-  var fEmail    = inner.querySelector('[data-zf="email"]');
-  var fExtra    = inner.querySelector('.z-extra');
-  var fHeadline = inner.querySelector('.z-headline');
-  var zForm     = inner.querySelector('.z-form');
+  var fEmail = inner.querySelector('[data-zf="email"]');
+  var fExtra = inner.querySelector('.z-extra');
+  var zForm  = inner.querySelector('.z-form');
   var zTy       = inner.querySelector('.z-thanks');
 
-  // Only personalise headline when company is verified (from email/form)
-  // Never show IP org name — it's the ISP, not the actual company
-  if(D.companyVerified && D.company){
-    fHeadline.innerHTML = 'Hiring at<br/>' + D.company + '?';
-  }
+  // Headline stays generic until email enrichment confirms real company
+  // Never personalise on load — IP org name is ISP, not actual company
   if(D.email) fEmail.value = D.email;
 
   // Email blur: enrich company + reveal name/phone fields
@@ -538,12 +534,7 @@ function buildPopup(){
     var em = fEmail.value.trim();
     if(em && em.indexOf('@') > 0){
       enrichFromEmail(em);
-      // Update headline once Clearbit resolves real company from email domain
-      setTimeout(function(){
-        if(D.companyVerified && D.company && fHeadline){
-          fHeadline.innerHTML = 'Hiring at<br/>' + D.company + '?';
-        }
-      }, 1500);
+      // No headline personalisation — stays generic
       // Expand name + phone fields (progressive disclosure)
       if(fExtra.style.display === 'none'){
         fExtra.style.display = 'block';
