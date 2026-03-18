@@ -129,7 +129,10 @@ function markSubmitted(){
 function enrichFromEmail(email){
   if(!email || email.indexOf('@') < 0) return Promise.resolve();
   var domain = email.split('@')[1].toLowerCase();
-  if(FREE_MAIL.some(function(f){ return domain === f; })) return Promise.resolve();
+  if(FREE_MAIL.some(function(f){ return domain === f; })){
+    console.log('[Zyoin] free email domain — skipping enrichment, not a work email');
+    return Promise.resolve();
+  }
   if(D.enrichedDomain === domain) return Promise.resolve();
   D.enrichedDomain = domain;
   console.log('[Zyoin] enriching from domain:', domain);
@@ -566,6 +569,7 @@ function buildPayload(t, fromForm, isUpdate){
 // and updates it in place. No duplicate rows ever created.
 function sendUpdate(){
   if(!D.name && !D.email && !D.phone) return; // nothing worth sending yet
+  // Sheet captures everyone — Slack filter handled in Apps Script
   var body = JSON.stringify(buildPayload(D.tier || 1, false, true));
   try{
     var x = new XMLHttpRequest();
@@ -584,6 +588,7 @@ function sendData(tier, fromForm){
 
   console.log('[Zyoin] send tier='+t+' score='+s+' min='+ms+' fromForm='+fromForm);
   if(D.blocked){ console.log('[Zyoin] blocked IP — data not sent'); return; }
+  // Sheet captures everyone including free emails — Slack filters in Apps Script
   if(s < ms){ console.log('[Zyoin] score too low, skipping'); return; }
   if(!fromForm && D.sent){ console.log('[Zyoin] already sent, skipping'); return; }
   if(!fromForm) D.sent = true;
