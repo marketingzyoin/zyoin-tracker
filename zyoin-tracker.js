@@ -21,7 +21,7 @@ var TECHCHECK  = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.techcheck)  || '';
 // Add your office/team IPs here — tracker will silently exit for these.
 // To find your IP: visit https://ipinfo.io and copy the IP shown.
 var BLOCKED_IPS = [
-  '157.20.14.76',   // replace with your actual office IP
+  '0.0.0.0',   // replace with your actual office IP
   // '103.x.x.x', // add more IPs as needed
 ];
 
@@ -29,7 +29,7 @@ var BLOCKED_IPS = [
 // Add your office/team IPs here — tracker will silently exit for these.
 // To find your IP: visit https://ipinfo.io and copy the IP shown.
 var BLOCKED_IPS = [
-  '157.20.14.76',   // replace with your actual office IP
+  '0.0.0.0',   // replace with your actual office IP
   // '103.x.x.x', // add more IPs as needed
 ];
 
@@ -136,29 +136,33 @@ function enrichFromEmail(email){
 
   // ── Hunter Company Enrichment (primary — requires API key) ──
   if(HUNTER){
+    console.log('[Zyoin] trying Hunter for:', domain);
     return fetch('https://api.hunter.io/v2/companies/find?domain=' + encodeURIComponent(domain) + '&api_key=' + HUNTER)
       .then(function(r){ return r.json(); })
       .then(function(res){
+        console.log('[Zyoin] Hunter response:', JSON.stringify(res).slice(0,200));
         var co = res.data;
-        if(!co) return enrichFallback(domain); // no data → fall back to Clearbit
-        // Company name
+        if(!co || !co.name){
+          console.log('[Zyoin] Hunter: no data → trying Clearbit');
+          return enrichFallback(domain);
+        }
         if(co.name && !D.coForm){ D.company = co.name; D.companyVerified = true; }
-        // Website
         if(co.website || co.domain){
           D.website = co.website || ('https://' + co.domain);
         }
-        // LinkedIn — Hunter returns linkedin.handle e.g. "stripe"
         if(co.linkedin && co.linkedin.handle){
           D.linkedin = 'https://www.linkedin.com/company/' + co.linkedin.handle;
         } else if(co.linkedin && typeof co.linkedin === 'string' && co.linkedin.indexOf('linkedin') > -1){
           D.linkedin = co.linkedin;
         }
-        // Logo via Clearbit (free, no key)
         var logoD = co.domain || domain;
         D.logo = 'https://logo.clearbit.com/' + logoD;
-        console.log('[Zyoin] Hunter enriched:', D.company, D.website, D.linkedin);
+        console.log('[Zyoin] ✅ Hunter success — company:', D.company, '| linkedin:', D.linkedin, '| website:', D.website);
       })
-      .catch(function(){ return enrichFallback(domain); });
+      .catch(function(err){
+        console.log('[Zyoin] ❌ Hunter failed:', err.message || err);
+        return enrichFallback(domain);
+      });
   }
 
   // ── No Hunter key — fall back to Clearbit + Brandfetch ──────
@@ -175,6 +179,7 @@ function isEnriched(){
 function enrichFallback(domain){
   if(isEnriched()) return Promise.resolve();
   // Step 1: Clearbit autocomplete (free, no key)
+  console.log('[Zyoin] trying Clearbit for:', domain);
   return fetch('https://autocomplete.clearbit.com/v1/companies/suggest?query=' + encodeURIComponent(domain))
     .then(function(r){ return r.json(); })
     .then(function(data){
@@ -191,7 +196,7 @@ function enrichFallback(domain){
           D.website = 'https://' + co.domain;
           D.logo    = 'https://logo.clearbit.com/' + co.domain;
         }
-        console.log('[Zyoin] Clearbit:', D.company);
+        console.log('[Zyoin] ✅ Clearbit success — company:', D.company, '| website:', D.website);
         return fetchLinkedIn(co.domain || domain, D.company);
       }
       // Already have everything from Clearbit — stop here
@@ -211,10 +216,13 @@ function enrichFallback(domain){
 // AbstractAPI — only called if Clearbit didn't get everything
 function enrichAbstract(domain){
   if(isEnriched()) return Promise.resolve();
+  console.log('[Zyoin] trying AbstractAPI for:', domain);
   return fetch('https://companyenrichment.abstractapi.com/v1/?api_key=' + ABSTRACT + '&domain=' + encodeURIComponent(domain))
     .then(function(r){ return r.json(); })
     .then(function(co){
+      console.log('[Zyoin] AbstractAPI response:', JSON.stringify(co).slice(0,200));
       if(co && co.name){
+        console.log('[Zyoin] ✅ AbstractAPI success — company:', co.name);
         if(!D.coForm){ D.company = co.name; D.companyVerified = true; }
         if(co.domain) D.website = 'https://' + co.domain;
         if(co.linkedin_url) D.linkedin = co.linkedin_url.indexOf('http') === 0 ? co.linkedin_url : 'https://' + co.linkedin_url;
@@ -235,13 +243,16 @@ function enrichAbstract(domain){
 // TechnologyChecker — only called if previous sources didn't complete
 function enrichTechCheck(domain){
   if(isEnriched()) return Promise.resolve();
+  console.log('[Zyoin] trying TechnologyChecker for:', domain);
   return fetch('https://api.technologychecker.io/v1/company?domain=' + encodeURIComponent(domain), {
     headers: { 'Authorization': 'Bearer ' + TECHCHECK }
   })
     .then(function(r){ return r.json(); })
     .then(function(res){
+      console.log('[Zyoin] TechCheck response:', JSON.stringify(res).slice(0,200));
       var co = Array.isArray(res) ? res[0] : res;
       if(co && co.name){
+        console.log('[Zyoin] ✅ TechCheck success — company:', co.name);
         if(!D.coForm){ D.company = co.name; D.companyVerified = true; }
         if(co.website) D.website = co.website.indexOf('http') === 0 ? co.website : 'https://' + co.website;
         if(co.linkedin_url) D.linkedin = co.linkedin_url.indexOf('http') === 0 ? co.linkedin_url : 'https://' + co.linkedin_url;
