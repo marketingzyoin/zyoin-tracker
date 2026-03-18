@@ -1,3 +1,4 @@
+<script>
 // ============================================================
 // ZYOIN VISITOR TRACKER v5.1
 // Paste into Webflow: Site Settings → Custom Code → Head
@@ -21,7 +22,7 @@ var TECHCHECK  = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.techcheck)  || '';
 // Add your office/team IPs here — tracker will silently exit for these.
 // To find your IP: visit https://ipinfo.io and copy the IP shown.
 var BLOCKED_IPS = [
-  '0.0.0.0',   // replace with your actual office IP
+  '157.20.14.76',   // replace with your actual office IP
   // '103.x.x.x', // add more IPs as needed
 ];
 
@@ -29,7 +30,7 @@ var BLOCKED_IPS = [
 // Add your office/team IPs here — tracker will silently exit for these.
 // To find your IP: visit https://ipinfo.io and copy the IP shown.
 var BLOCKED_IPS = [
-  '0.0.0.0',   // replace with your actual office IP
+  '157.20.14.76',   // replace with your actual office IP
   // '103.x.x.x', // add more IPs as needed
 ];
 
@@ -892,3 +893,4 @@ window.addEventListener('load', function(){
 });
 
 })();
+</script>
