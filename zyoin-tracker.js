@@ -150,8 +150,12 @@ function enrichFromEmail(email){
           return enrichFallback(domain);
         }
         if(co.name && !D.coForm){ D.company = co.name; D.companyVerified = true; }
-        if(co.website || co.domain){
-          D.website = co.website || ('https://' + co.domain);
+        // Hunter often returns website as undefined — always build from domain
+        if(co.domain){
+          D.website = 'https://' + co.domain;
+          D.logo    = 'https://logo.clearbit.com/' + co.domain;
+        } else if(co.website){
+          D.website = co.website;
         }
         // Hunter linkedin.handle can be "company/zyoin" or just "zyoin"
         if(co.linkedin && co.linkedin.handle){
@@ -284,32 +288,25 @@ function enrichTechCheck(domain){
 function enrichCompany(name){
   if(!name || name.length < 2) return;
   var q = encodeURIComponent(name.trim());
-
   fetch('https://autocomplete.clearbit.com/v1/companies/suggest?query=' + q)
     .then(function(r){ return r.json(); })
     .then(function(data){
       if(!data || !data.length) return;
       var co = data[0];
-
-      // ── Real name ───────────────────────────────────────────
-      if(co.name) D.company = co.name;
-
-      // ── Real website ────────────────────────────────────────
+      if(co.name && !D.companyVerified) D.company = co.name;
       if(co.domain){
         D.website = 'https://' + co.domain;
         D.logo    = 'https://logo.clearbit.com/' + co.domain;
-        // Step 2: use domain to get real LinkedIn via Brandfetch
-        fetchLinkedIn(co.domain, co.name);
       }
-
-      console.log('[Zyoin] Clearbit:', D.company, D.website);
+      // Use slug fallback for LinkedIn — no external API needed
+      if(!D.linkedin) fallbackLinkedIn(co.name || name);
+      console.log('[Zyoin] enrichCompany:', D.company, D.website, D.linkedin);
     })
     .catch(function(){});
 }
 
 // Fetch real LinkedIn company URL via Brandfetch (free, no key required)
 function fetchLinkedIn(domain, companyName){
-  // Brandfetch requires registration — use slug fallback directly
   fallbackLinkedIn(companyName || D.company);
   return Promise.resolve();
 }
@@ -379,21 +376,41 @@ function getIP(){
     D.country     = country || D.country || '';
     D.residential = res;
     D.network     = res ? 'Residential / WFH' : (raw ? 'Corporate Network' : 'Unknown');
-    D.isp         = raw; // always store raw ISP name
-    // Use org name as company baseline — better than blank.
-    // Will be upgraded to real company name if visitor fills work email.
-    if(raw && !res){
-      D.company = raw;
-      // Try Clearbit to clean up the ISP org name into a real company
-      enrichCompany(raw);
-    }
+    D.isp = raw; // ISP only — company never set from IP
   }
 
-  return fetch('https://ipinfo.io/json')
+  var ipinfoUrl = IPINFO
+    ? 'https://ipinfo.io/json?token=' + IPINFO
+    : 'https://ipinfo.io/json';
+
+  return fetch(ipinfoUrl)
     .then(function(r){ return r.json(); })
     .then(function(d){
       if(checkBlocked(d.ip)) return Promise.reject('blocked');
-      apply(d.org, d.city, d.country);
+      // IPinfo with token returns d.company = {name, domain, type}
+      // type "isp" or "hosting" means it's a network provider, not a real company
+      if(IPINFO && d.company && d.company.name &&
+         d.company.type !== 'isp' && d.company.type !== 'hosting'){
+        D.city        = d.city    || '';
+        D.country     = d.country || '';
+        D.isp         = (d.org||'').replace(/^AS[0-9]+\s*/,'').trim();
+        D.network     = 'Corporate Network';
+        D.residential = false;
+        if(!D.companyVerified){
+          D.company         = d.company.name;
+          D.companyVerified = true;
+          if(d.company.domain){
+            D.website = 'https://' + d.company.domain;
+            D.logo    = 'https://logo.clearbit.com/' + d.company.domain;
+            fallbackLinkedIn(d.company.name);
+          }
+        }
+        console.log('[Zyoin] IPinfo company:', D.company, '| type:', d.company.type);
+      } else {
+        // No token or visitor is on ISP — just get location, leave company blank
+        apply(d.org, d.city, d.country);
+      }
+      if(ABSTRACTIP) enrichFromIP(d.ip);
     })
     .catch(function(){
       // Fallback: ipapi.co — free, CORS-friendly, no key required
