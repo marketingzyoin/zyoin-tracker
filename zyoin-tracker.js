@@ -21,7 +21,7 @@ var TECHCHECK  = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.techcheck)  || '';
 // Add your office/team IPs here — tracker will silently exit for these.
 // To find your IP: visit https://ipinfo.io and copy the IP shown.
 var BLOCKED_IPS = [
-  '157.20.14.76',   // replace with your actual office IP
+  '0.0.0.0',   // replace with your actual office IP
   // '103.x.x.x', // add more IPs as needed
 ];
 
@@ -29,7 +29,7 @@ var BLOCKED_IPS = [
 // Add your office/team IPs here — tracker will silently exit for these.
 // To find your IP: visit https://ipinfo.io and copy the IP shown.
 var BLOCKED_IPS = [
-  '157.20.14.76',   // replace with your actual office IP
+  '0.0.0.0',   // replace with your actual office IP
   // '103.x.x.x', // add more IPs as needed
 ];
 
@@ -153,11 +153,19 @@ function enrichFromEmail(email){
         if(co.website || co.domain){
           D.website = co.website || ('https://' + co.domain);
         }
+        // Hunter linkedin.handle can be "company/zyoin" or just "zyoin"
         if(co.linkedin && co.linkedin.handle){
-          var handle = co.linkedin.handle.replace(/^\/?(company\/)?/,'');
+          var handle = co.linkedin.handle
+            .replace(/^https?:\/\/(www\.)?linkedin\.com\//,'')
+            .replace(/^\/?(company\/)+/,'')
+            .replace(/\/$/,'');
           D.linkedin = 'https://www.linkedin.com/company/' + handle;
-        } else if(co.linkedin && typeof co.linkedin === 'string' && co.linkedin.indexOf('linkedin') > -1){
-          D.linkedin = co.linkedin.indexOf('http') === 0 ? co.linkedin : 'https://' + co.linkedin;
+        } else if(co.linkedin && typeof co.linkedin === 'string'){
+          var li = co.linkedin;
+          if(li.indexOf('linkedin.com') > -1){
+            // Already a full URL — clean it up
+            D.linkedin = li.indexOf('http') === 0 ? li : 'https://' + li;
+          }
         }
         var logoD = co.domain || domain;
         D.logo = 'https://logo.clearbit.com/' + logoD;
@@ -569,6 +577,7 @@ function buildPayload(t, fromForm, isUpdate){
 // and updates it in place. No duplicate rows ever created.
 function sendUpdate(){
   if(!D.name && !D.email && !D.phone) return; // nothing worth sending yet
+  console.log('[Zyoin] sendUpdate → company:', D.coForm||D.company, '| linkedin:', D.linkedin, '| email:', D.email);
   // Sheet captures everyone — Slack filter handled in Apps Script
   var body = JSON.stringify(buildPayload(D.tier || 1, false, true));
   try{
@@ -587,6 +596,7 @@ function sendData(tier, fromForm){
   var ms = MIN_SCORE[t] || 10;
 
   console.log('[Zyoin] send tier='+t+' score='+s+' min='+ms+' fromForm='+fromForm);
+  console.log('[Zyoin] payload preview → company:', D.coForm||D.company, '| linkedin:', D.linkedin, '| website:', D.website, '| email:', D.email);
   if(D.blocked){ console.log('[Zyoin] blocked IP — data not sent'); return; }
   // Sheet captures everyone including free emails — Slack filters in Apps Script
   if(s < ms){ console.log('[Zyoin] score too low, skipping'); return; }
