@@ -825,37 +825,18 @@ window.addEventListener('load', function(){
       }
       window.zyoinFirePopup = firePopup;
 
-      // Fire popup via exit intent
-      // If cookie banner is visible: wait max 8s for dismissal, then fire anyway
-      function firePopupIntent(){
-        var b = document.getElementById('zcc-wrap');
-        var bannerVisible = b && b.classList.contains('zcc-visible');
-        if(bannerVisible){
-          var waited = 0;
-          var wait = setInterval(function(){
-            waited += 300;
-            var bb = document.getElementById('zcc-wrap');
-            var stillVisible = bb && bb.classList.contains('zcc-visible');
-            // Fire when: banner dismissed OR max 8s wait reached
-            if(!stillVisible || waited >= 8000){
-              clearInterval(wait);
-              setTimeout(function(){ firePopup(); }, stillVisible ? 0 : 600);
-            }
-          }, 300);
-          return;
-        }
-        firePopup();
-      }
+
       // Exit intent — desktop: mouse moves to top of browser (address bar)
+      // Exit intent — fires immediately, no delays, no conditions
       document.addEventListener('mouseleave', function(e){
-        if(e.clientY < 20) firePopupIntent();
+        if(e.clientY < 20) firePopup();
       });
       // Mobile: fast scroll up near top of page
       window.addEventListener('scroll', function(){
         var y = window.scrollY;
         var t = Date.now();
         var speed = (lastY - y) / (t - lastT + 1) * 1000;
-        if(speed > 800 && y < 300) firePopupIntent();
+        if(speed > 800 && y < 300) firePopup();
         lastY = y; lastT = t;
       }, {passive:true});
     }
