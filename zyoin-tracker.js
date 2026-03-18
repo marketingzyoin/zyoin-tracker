@@ -814,43 +814,46 @@ window.addEventListener('load', function(){
     initCapture();
     initBehaviour();
 
+    // ── Popup setup — done BEFORE IP lookup so exit intent is ready instantly ──
+    var pop = null, sli = null, fired = false;
+    if(!hasSubmitted()){
+      pop = buildPopup();
+      sli = buildSlideIn();
+
+      var lastY = 0, lastT = 0;
+      function firePopup(){
+        if(!fired){ fired=true; pop.classList.add('on'); }
+      }
+      // Exit intent — desktop: mouse moves to top of browser (address bar)
+      document.addEventListener('mouseleave', function(e){
+        if(e.clientY < 20) firePopup();
+      });
+      // Mobile: fast scroll up near top of page
+      window.addEventListener('scroll', function(){
+        var y = window.scrollY;
+        var t = Date.now();
+        var speed = (lastY - y) / (t - lastT + 1) * 1000;
+        if(speed > 800 && y < 300) firePopup();
+        lastY = y; lastT = t;
+      }, {passive:true});
+    }
+
     getIP().then(function(){
       console.log('[Zyoin] ready — company='+D.company+' city='+D.city+' network='+D.network);
 
-      // ── Popup on ALL pages (unless visitor already submitted) ──
-      if(!hasSubmitted()){
-        var pop = buildPopup();
-        var sli = buildSlideIn();
-
-        // Exit intent — desktop: mouse leaves top; mobile: fast scroll up
-        var fired = false;
-        var lastY = 0, lastT = 0;
-        function firePopup(){
-          if(!fired){ fired=true; pop.classList.add('on'); }
-        }
-        document.addEventListener('mouseleave', function(e){
-          if(e.clientY < 50) firePopup();
-        });
-        // Mobile: detect fast upward scroll (user reaching for back button)
-        window.addEventListener('scroll', function(){
-          var y = window.scrollY;
-          var t = Date.now();
-          var speed = (lastY - y) / (t - lastT + 1) * 1000; // px/sec upward
-          if(speed > 800 && y < 300) firePopup(); // fast scroll up near top
-          lastY = y; lastT = t;
-        }, {passive:true});
-
-        // Slide-in after 25 seconds
-        // Show slide-in sooner if high-intent (tier 1 or came via UTM/LinkedIn)
+      if(!hasSubmitted() && pop){
+        // Slide-in timer
         var slideDelay = 25000;
         if(D.tier === 1) slideDelay = 15000;
         if(D.utm || (D.ref && D.ref.indexOf('linkedin') > -1)) slideDelay = 12000;
-        setTimeout(function(){ sli.classList.add('on'); }, slideDelay);
+        setTimeout(function(){ if(sli) sli.classList.add('on'); }, slideDelay);
 
-        // Show popup sooner for UTM visitors (they have intent)
-        if(D.utm || (D.ref && D.ref.indexOf('linkedin') > -1)){
-          setTimeout(function(){ if(!fired){ fired=true; pop.classList.add('on'); } }, 8000);
-        }
+        // Popup timer
+        var popDelay = 30000;
+        if(tier === 1) popDelay = 15000;
+        if(tier === 2) popDelay = 20000;
+        if(D.utm || (D.ref && D.ref.indexOf('linkedin') > -1)) popDelay = 8000;
+        setTimeout(function(){ firePopup(); }, popDelay);
       }
 
       // ── Auto-tracking on tier pages (non job-seekers only) ────
