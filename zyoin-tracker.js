@@ -402,7 +402,8 @@ function getIP(){
         // No token or visitor is on ISP — just get location, leave company blank
         apply(d.org, d.city, d.country);
       }
-      if(ABSTRACTIP) enrichFromIP(d.ip);
+      // AbstractAPI IP removed — 401 on free tier for IP geolocation
+      // City/country already captured from ipinfo.io
     })
     .catch(function(){
       // Fallback: ipapi.co — free, CORS-friendly, no key required
@@ -822,14 +823,19 @@ window.addEventListener('load', function(){
 
       var lastY = 0, lastT = 0;
       function firePopup(){
-        // Wait for cookie consent to be resolved first
-        if(window.zyoinCookieReady === false){
+        // Only block if cookie banner is currently VISIBLE on screen
+        // If banner is hidden/dismissed or not present, allow popup
+        var bannerVisible = (function(){
+          var b = document.getElementById('zcc-wrap');
+          if(!b) return false;
+          return b.classList.contains('zcc-visible');
+        })();
+        if(bannerVisible){
           window.zyoinPopupQueued = true;
           return;
         }
         if(!fired){ fired=true; pop.classList.add('on'); }
       }
-      // Expose globally so cookie banner can trigger popup after dismissal
       window.zyoinFirePopup = firePopup;
       // Exit intent — desktop: mouse moves to top of browser (address bar)
       document.addEventListener('mouseleave', function(e){
