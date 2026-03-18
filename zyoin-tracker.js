@@ -21,7 +21,7 @@ var TECHCHECK  = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.techcheck)  || '';
 // Add your office/team IPs here — tracker will silently exit for these.
 // To find your IP: visit https://ipinfo.io and copy the IP shown.
 var BLOCKED_IPS = [
-  '0.0.0.0',   // replace with your actual office IP
+  '157.20.14.76',   // replace with your actual office IP
   // '103.x.x.x', // add more IPs as needed
 ];
 
@@ -29,7 +29,7 @@ var BLOCKED_IPS = [
 // Add your office/team IPs here — tracker will silently exit for these.
 // To find your IP: visit https://ipinfo.io and copy the IP shown.
 var BLOCKED_IPS = [
-  '0.0.0.0',   // replace with your actual office IP
+  '157.20.14.76',   // replace with your actual office IP
   // '103.x.x.x', // add more IPs as needed
 ];
 
@@ -151,9 +151,10 @@ function enrichFromEmail(email){
           D.website = co.website || ('https://' + co.domain);
         }
         if(co.linkedin && co.linkedin.handle){
-          D.linkedin = 'https://www.linkedin.com/company/' + co.linkedin.handle;
+          var handle = co.linkedin.handle.replace(/^\/?(company\/)?/,'');
+          D.linkedin = 'https://www.linkedin.com/company/' + handle;
         } else if(co.linkedin && typeof co.linkedin === 'string' && co.linkedin.indexOf('linkedin') > -1){
-          D.linkedin = co.linkedin;
+          D.linkedin = co.linkedin.indexOf('http') === 0 ? co.linkedin : 'https://' + co.linkedin;
         }
         var logoD = co.domain || domain;
         D.logo = 'https://logo.clearbit.com/' + logoD;
@@ -297,29 +298,9 @@ function enrichCompany(name){
 
 // Fetch real LinkedIn company URL via Brandfetch (free, no key required)
 function fetchLinkedIn(domain, companyName){
-  return fetch('https://api.brandfetch.io/v2/brands/' + encodeURIComponent(domain))
-    .then(function(r){ return r.json(); })
-    .then(function(brand){
-      // Brandfetch returns links array with type: "linkedin"
-      var links = brand.links || [];
-      var li = null;
-      for(var i=0; i<links.length; i++){
-        if(links[i].type === 'linkedin' || (links[i].url && links[i].url.indexOf('linkedin.com/company') > -1)){
-          li = links[i].url;
-          break;
-        }
-      }
-      if(li){
-        D.linkedin = li;
-        console.log('[Zyoin] LinkedIn found:', D.linkedin);
-      } else {
-        // Brandfetch didn't have LinkedIn — build best-guess slug from clean name
-        fallbackLinkedIn(companyName || D.company);
-      }
-    })
-    .catch(function(){
-      fallbackLinkedIn(companyName || D.company);
-    });
+  // Brandfetch requires registration — use slug fallback directly
+  fallbackLinkedIn(companyName || D.company);
+  return Promise.resolve();
 }
 
 // Last resort: build slug from company name (better than nothing)
@@ -469,8 +450,10 @@ function initCapture(){
     var changed = false;
     if(el.type==='email' || fn.indexOf('email')>-1){
       if(val.indexOf('@')>-1 && val !== D.email){
-        D.email = val; changed = true;
-        enrichFromEmail(val);
+        D.email = val;
+        // Wait for enrichment then send — so company/linkedin/website are ready
+        enrichFromEmail(val).then(function(){ sendUpdate(); });
+        changed = false; // handled above, don't double-send below
       }
     }
     if(fn.indexOf('name')>-1 && fn.indexOf('company')<0 && fn.indexOf('last')<0){
