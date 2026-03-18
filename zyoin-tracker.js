@@ -21,7 +21,7 @@ var TECHCHECK  = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.techcheck)  || '';
 // Add your office/team IPs here — tracker will silently exit for these.
 // To find your IP: visit https://ipinfo.io and copy the IP shown.
 var BLOCKED_IPS = [
-  '0.0.0.0',   // replace with your actual office IP
+  '157.20.14.76',   // replace with your actual office IP
   // '103.x.x.x', // add more IPs as needed
 ];
 
@@ -29,7 +29,7 @@ var BLOCKED_IPS = [
 // Add your office/team IPs here — tracker will silently exit for these.
 // To find your IP: visit https://ipinfo.io and copy the IP shown.
 var BLOCKED_IPS = [
-  '0.0.0.0',   // replace with your actual office IP
+  '157.20.14.76',   // replace with your actual office IP
   // '103.x.x.x', // add more IPs as needed
 ];
 
@@ -455,18 +455,27 @@ function initCapture(){
     var fn  = ((el.name||'') + (el.placeholder||'') + (el.id||'')).toLowerCase();
     var val = (el.value||'').trim();
     if(!val) return;
+    var changed = false;
     if(el.type==='email' || fn.indexOf('email')>-1){
-      if(val.indexOf('@')>-1){
-        D.email=val;
-        enrichFromEmail(val); // auto-enrich company from email domain
+      if(val.indexOf('@')>-1 && val !== D.email){
+        D.email = val; changed = true;
+        enrichFromEmail(val);
       }
     }
-    if(fn.indexOf('name')>-1 && fn.indexOf('company')<0 && fn.indexOf('last')<0) D.name=val;
-    if(el.type==='tel' || fn.indexOf('phone')>-1 || fn.indexOf('mobile')>-1) D.phone=val;
-    if(fn.indexOf('company')>-1 || fn.indexOf('organisation')>-1){
-      D.coForm=val; D.company=val; D.companyVerified=true;
-      enrichCompany(val); // Clearbit lookup on typed company name
+    if(fn.indexOf('name')>-1 && fn.indexOf('company')<0 && fn.indexOf('last')<0){
+      if(val !== D.name){ D.name = val; changed = true; }
     }
+    if(el.type==='tel' || fn.indexOf('phone')>-1 || fn.indexOf('mobile')>-1){
+      if(val !== D.phone){ D.phone = val; changed = true; }
+    }
+    if(fn.indexOf('company')>-1 || fn.indexOf('organisation')>-1){
+      if(val !== D.coForm){
+        D.coForm=val; D.company=val; D.companyVerified=true; changed=true;
+        enrichCompany(val);
+      }
+    }
+    // Send update immediately on every field capture — upserts existing row
+    if(changed) sendUpdate();
   }, true);
 
   // Track CTA clicks
@@ -514,6 +523,65 @@ function calcScore(tier){
   return s;
 }
 
+// ── PAYLOAD BUILDER ──────────────────────────────────────────
+function buildPayload(t, fromForm, isUpdate){
+  var s = calcScore(t);
+  return {
+    visitDate:       (function(){
+      var d = new Date();
+      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+    })(),
+    visitDay:        ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()],
+    name:            D.name,
+    email:           D.email,
+    phone:           D.phone,
+    company:         D.coForm || D.company,
+    linkedinUrl:     D.linkedin,
+    websiteUrl:      D.website,
+    logoUrl:         D.logo,
+    isp:             D.isp || '',
+    city:            D.city,
+    country:         D.country,
+    networkType:     D.network,
+    currentPage:     D.page,
+    pageTier:        'Tier ' + t,
+    pagesVisited:    D.pages.join(' → '),
+    referrer:        D.ref,
+    utmSource:       D.utm,
+    timeOnPage:      D.time + 's',
+    scrollDepth:     D.scroll + '%',
+    clickedCTA:      D.cta,
+    filledForm:      D.form || fromForm,
+    returnVisitor:   D.returning,
+    visitCount:      D.visits,
+    engagementScore: s,
+    leadQuality:     D.quality,
+    source:          'Zyoin Tracker v5.2',
+    slackUrl:        SLACK,
+    visitorId:       D.visitorId,
+    timezone:        D.timezone,
+    screenSize:      D.screenW + 'x' + D.screenH,
+    language:        D.lang,
+    isUpdate:        isUpdate, // tells Apps Script to upsert not append
+  };
+}
+
+// ── SEND UPDATE (upsert — updates existing row for this visitor) ──
+// Called on every blur capture. Apps Script finds the row by visitorId
+// and updates it in place. No duplicate rows ever created.
+function sendUpdate(){
+  if(!D.name && !D.email && !D.phone) return; // nothing worth sending yet
+  var body = JSON.stringify(buildPayload(D.tier || 1, false, true));
+  try{
+    var x = new XMLHttpRequest();
+    x.open('POST', SHEETS, true);
+    x.setRequestHeader('Content-Type','text/plain;charset=UTF-8');
+    x.onload = function(){ console.log('[Zyoin] update:', x.status); };
+    x.send(body);
+  }catch(e){}
+}
+
 // ── SEND ─────────────────────────────────────────────────────
 function sendData(tier, fromForm){
   var t  = tier > 0 ? tier : 1;
@@ -526,44 +594,7 @@ function sendData(tier, fromForm){
   if(!fromForm && D.sent){ console.log('[Zyoin] already sent, skipping'); return; }
   if(!fromForm) D.sent = true;
 
-  var body = JSON.stringify({
-    visitDate:       (function(){
-      var d = new Date();
-      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      return d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
-    })(),
-    visitDay:        ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()],
-    name:            D.name,
-    email:           D.email,
-    phone:           D.phone,
-    company:         D.coForm || D.company,  // real company from form/Clearbit
-    isp:             D.isp || '',            // internet provider from IP (not employer)
-    linkedinUrl:     D.linkedin,
-    websiteUrl:      D.website,
-    city:            D.city,
-    country:         D.country,
-    networkType:     D.network,
-    currentPage:     D.page,
-    pageTier:        'Tier ' + t,
-    pagesVisited:    D.pages.join(' → '),
-    referrer:        D.ref,
-    utmSource:       D.utm,
-    timeOnPage:      D.time + 's',
-    scrollDepth:     D.scroll + '%',
-    clickedCTA:      D.cta,
-    filledForm:      D.form,
-    returnVisitor:   D.returning,
-    visitCount:      D.visits,
-    engagementScore: D.score,
-    leadQuality:     D.quality,
-    source:          'Zyoin Tracker v5.2',
-    slackUrl:        SLACK,
-    // Device & identity
-    visitorId:       D.visitorId,
-    timezone:        D.timezone,
-    screenSize:      D.screenW + 'x' + D.screenH,
-    language:        D.lang,
-  });
+  var body = JSON.stringify(buildPayload(t, fromForm, false));;
 
   try {
     var x = new XMLHttpRequest();
