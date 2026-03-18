@@ -19,19 +19,10 @@ var TECHCHECK  = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.techcheck)  || '';
 var IPINFO     = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.ipinfo)     || '';
 
 // ── BLOCKED IPs ──────────────────────────────────────────────
-// Add your office/team IPs here — tracker will silently exit for these.
-// To find your IP: visit https://ipinfo.io and copy the IP shown.
+// Add your office/team IPs here — no data sent for these IPs.
+// Find your IP at: https://ipinfo.io
 var BLOCKED_IPS = [
-  '0.0.0.0',   // replace with your actual office IP
-  // '103.x.x.x', // add more IPs as needed
-];
-
-// ── BLOCKED IPs ──────────────────────────────────────────────
-// Add your office/team IPs here — tracker will silently exit for these.
-// To find your IP: visit https://ipinfo.io and copy the IP shown.
-var BLOCKED_IPS = [
-  '0.0.0.0',   // replace with your actual office IP
-  // '103.x.x.x', // add more IPs as needed
+  // '103.x.x.x', // add your office IP here
 ];
 
 // ── TRACKED PAGES ────────────────────────────────────────────
