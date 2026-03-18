@@ -822,8 +822,15 @@ window.addEventListener('load', function(){
 
       var lastY = 0, lastT = 0;
       function firePopup(){
+        // Wait for cookie consent to be resolved first
+        if(window.zyoinCookieReady === false){
+          window.zyoinPopupQueued = true;
+          return;
+        }
         if(!fired){ fired=true; pop.classList.add('on'); }
       }
+      // Expose globally so cookie banner can trigger popup after dismissal
+      window.zyoinFirePopup = firePopup;
       // Exit intent — desktop: mouse moves to top of browser (address bar)
       document.addEventListener('mouseleave', function(e){
         if(e.clientY < 20) firePopup();
