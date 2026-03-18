@@ -333,11 +333,8 @@ function enrichFromIP(ip){
       var res = RESIDENTIAL.some(function(s){ return chk.indexOf(s) > -1; });
       if(res) return; // skip residential ISPs
       // AbstractAPI gives better org names than ipinfo for many Indian companies
-      if(!D.coForm && !D.companyVerified){
-        D.company = name;
-        D.isp     = name;
-        enrichCompany(name); // try Clearbit to clean up the name
-      }
+      // Only update ISP — never set company from IP org name
+      D.isp = name;
       // Better city/country if we didn't get it from ipinfo
       if(!D.city    && d.city)    D.city    = d.city;
       if(!D.country && d.country) D.country = d.country;
