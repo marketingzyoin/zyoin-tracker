@@ -2,7 +2,6 @@
 // ZYOIN CHATBOT — FRONTEND
 //
 // HOW TO ADD TO WEBFLOW:
-// 1. Go to Project Settings → Custom Code → Footer Code
 //    <script>
 //      window.ZYOIN_CONFIG = { chatbot: "YOUR_APPS_SCRIPT_WEB_APP_URL" };
 //    </script>
@@ -34,17 +33,20 @@
     'USPs: AI-augmented process, 40% faster time-to-hire, 95%+ retention at 6 months, Pan-India + global coverage, no placement no fee for permanent hiring.\n\n' +
     'PRICING: Custom quotes only.\n\n' +
     'IMPORTANT BEHAVIOUR:\n' +
-    '- The user has already submitted their contact details via a form before chatting with you.\n' +
-    '- Do NOT ask for their name, email, phone, or company — you already have it.\n' +
-    '- Just answer their hiring questions helpfully and concisely.\n' +
-    '- If they want to speak to someone, tell them a consultant will reach out within 24 hours.';
+    '- The user has already told you what service they are interested in.\n' +
+    '- Give a brief, helpful 2-3 sentence overview of that service.\n' +
+    '- End with something like: "Let me get your details so our team can reach out with a tailored solution!"\n' +
+    '- Do NOT ask for their name, email, phone, or company — the form will collect it.\n' +
+    '- Do NOT use markdown bold (**text**) in your replies — plain text only.\n' +
+    '- After the form is submitted you will know their name. Greet them and confirm a consultant will reach out within 24 hours.';
 
   // ── STATE ─────────────────────────────────────────────────────
-  var history   = [];
-  var leadSent  = false;
-  var formDone  = false;
-  var open      = false;
-  var busy      = false;
+  var history  = [];
+  var leadSent = false;
+  var formDone = false;
+  var open     = false;
+  var busy     = false;
+  var userNeed = '';
 
   // ── SEND LEAD ─────────────────────────────────────────────────
   function sendLead(data) {
@@ -54,7 +56,7 @@
       method: 'POST', redirect: 'follow',
       body: JSON.stringify({
         action: 'lead', name: data.name, email: data.email,
-        phone: data.phone, company: data.company, need: data.need,
+        phone: data.phone, company: data.company, need: data.need || userNeed,
         page: window.location.pathname, time: new Date().toISOString()
       })
     }).catch(function () {});
@@ -190,19 +192,35 @@
   }
 
   function showTyping() { document.getElementById('zara-typing').classList.add('on'); document.getElementById('zara-msgs').scrollTop = 9999; }
-  function hideTyping() { document.getElementById('zara-typing').classList.remove('on'); }
+  function hideTyping()  { document.getElementById('zara-typing').classList.remove('on'); }
 
   function setQR(opts) {
     var qr = document.getElementById('zara-qr');
     qr.innerHTML = '';
     (opts || []).forEach(function (o) {
       var b = document.createElement('button'); b.className = 'zq'; b.textContent = o;
-      b.onclick = function () { qr.innerHTML = ''; send(o); };
+      b.onclick = function () { qr.innerHTML = ''; onServiceClick(o); };
       qr.appendChild(b);
     });
   }
 
-  // ── LEAD FORM — shown immediately after greeting ───────────────
+  // ── STEP 1: user picks a service → Zara replies → form appears ─
+  function onServiceClick(service) {
+    userNeed = service;
+    addMsg(service, 'u');
+    busy = true;
+    document.getElementById('zara-send').disabled = true;
+    showTyping();
+
+    chat(service, function (reply, isErr) {
+      hideTyping();
+      addMsg(reply, 'b', isErr);
+      // Show the form right after Zara's reply
+      setTimeout(showLeadForm, 300);
+    });
+  }
+
+  // ── STEP 2: lead form ─────────────────────────────────────────
   function showLeadForm() {
     var msgs   = document.getElementById('zara-msgs');
     var typing = document.getElementById('zara-typing');
@@ -210,19 +228,18 @@
     var card = document.createElement('div');
     card.className = 'zf-card';
     card.innerHTML =
-      '<div class="zf-title">📋 Tell us about yourself</div>' +
+      '<div class="zf-title">📋 Your Details</div>' +
       '<div class="zf-row">' +
         '<div class="zf-field"><label>Full Name *</label><input id="zf-name" type="text" placeholder="Rahul Sharma" /></div>' +
         '<div class="zf-field"><label>Company *</label><input id="zf-company" type="text" placeholder="Acme Corp" /></div>' +
       '</div>' +
       '<div class="zf-field"><label>Work Email *</label><input id="zf-email" type="email" placeholder="rahul@company.com" /></div>' +
       '<div class="zf-field"><label>Phone (optional)</label><input id="zf-phone" type="tel" placeholder="+91 98765 43210" /></div>' +
-      '<button class="zf-btn" id="zf-submit">Get Started →</button>' +
+      '<button class="zf-btn" id="zf-submit">Connect me with Zyoin →</button>' +
       '<div class="zf-note">🔒 No spam. A consultant will reach out within 24 hrs.</div>';
 
     msgs.insertBefore(card, typing);
     msgs.scrollTop = msgs.scrollHeight;
-
     setTimeout(function () { var f = document.getElementById('zf-name'); if (f) f.focus(); }, 150);
 
     document.getElementById('zf-submit').onclick = function () {
@@ -234,7 +251,7 @@
       if (!name || !email || !company) {
         var btn = document.getElementById('zf-submit');
         btn.textContent = '⚠️ Name, Company & Email are required';
-        setTimeout(function () { btn.textContent = 'Get Started →'; }, 2500);
+        setTimeout(function () { btn.textContent = 'Connect me with Zyoin →'; }, 2500);
         return;
       }
 
@@ -242,27 +259,32 @@
       var sbtn = document.getElementById('zf-submit');
       sbtn.disabled = true; sbtn.textContent = 'Sending…';
 
-      sendLead({ name: name, company: company, email: email, phone: phone, need: '' });
+      sendLead({ name: name, company: company, email: email, phone: phone, need: userNeed });
 
       setTimeout(function () {
         card.remove();
         formDone = true;
 
-        // Unlock input
-        document.getElementById('zara-in').disabled  = false;
+        // Unlock chat input
+        document.getElementById('zara-in').disabled   = false;
         document.getElementById('zara-send').disabled = false;
+        document.getElementById('zara-in').placeholder = 'Ask me anything about hiring...';
 
-        // Zara greets them by name and opens conversation
-        var greeting = 'Hi ' + name + '! 👋 Great to meet you. How can Zyoin help ' + company + ' today? Feel free to ask about any of our hiring services.';
-        addMsg(greeting, 'b');
-        history.push({ role: 'assistant', content: greeting });
-
-        setQR(['Permanent Hiring', 'Leadership Hiring', 'Global Hiring', 'RPO / Outsourcing', 'All Services']);
+        // Zara thanks them and continues
+        var summary = 'Form submitted. My name is ' + name + ', company is ' + company + ', email is ' + email + (phone ? ', phone is ' + phone : '') + ', interested in ' + userNeed + '.';
+        busy = true;
+        showTyping();
+        chat(summary, function (reply, isErr) {
+          hideTyping();
+          busy  = false;
+          document.getElementById('zara-send').disabled = false;
+          addMsg(reply, 'b', isErr);
+        });
       }, 400);
     };
   }
 
-  // ── SEND ──────────────────────────────────────────────────────
+  // ── STEP 3: free chat after form ──────────────────────────────
   function send(text) {
     if (!text || busy || !formDone) return;
     var inp = document.getElementById('zara-in');
@@ -275,7 +297,7 @@
 
     chat(text, function (reply, isErr) {
       hideTyping();
-      busy = false;
+      busy  = false;
       document.getElementById('zara-send').disabled = false;
       addMsg(reply, 'b', isErr);
     });
@@ -313,7 +335,7 @@
       '<div id="zara-msgs"><div id="zara-typing"><div class="zt"></div><div class="zt"></div><div class="zt"></div></div></div>' +
       '<div id="zara-qr"></div>' +
       '<div id="zara-foot">' +
-        '<textarea id="zara-in" rows="1" placeholder="Fill in your details above first..." disabled></textarea>' +
+        '<textarea id="zara-in" rows="1" placeholder="Select what you\'re looking for above..." disabled></textarea>' +
         '<button id="zara-send" disabled>' +
           '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
         '</button>' +
@@ -326,10 +348,10 @@
     inp.oninput   = function () { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 80) + 'px'; };
     document.getElementById('zara-send').onclick = function () { send(inp.value.trim()); };
 
-    // Greeting then immediately show form
+    // Greeting + quick replies immediately
     setTimeout(function () {
-      addMsg('Hi there! 👋 I\'m Zara, Zyoin\'s AI hiring assistant. To get started, please share a few quick details and our team will be ready to help you right away.', 'b');
-      setTimeout(showLeadForm, 400);
+      addMsg('Hi there! 👋 I\'m Zara, Zyoin\'s AI hiring assistant. What are you looking for today?', 'b');
+      setQR(['Permanent Hiring', 'Leadership Hiring', 'Global Hiring', 'RPO / Outsourcing', 'Contract Hiring', 'All Services']);
     }, 200);
   }
 
