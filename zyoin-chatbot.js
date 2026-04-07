@@ -7,7 +7,7 @@
 //    <script>
 //      window.ZYOIN_CONFIG = { chatbot: "YOUR_APPS_SCRIPT_WEB_APP_URL" };
 //    </script>
-//    <script src="YOUR_CDN_OR_ASSET_URL/zyoin-chatbot.js"></script>
+//    <script src="https://cdn.jsdelivr.net/gh/marketingzyoin/zyoin-tracker@main/zyoin-chatbot.js" defer></script>
 // ============================================================
 
 (function () {
@@ -45,59 +45,56 @@
     '- Dedicated account managers\n\n' +
     'PRICING: Custom quotes only — a consultant will provide details.\n\n' +
     'LEAD CAPTURE:\n' +
-    '- After 2-3 messages naturally ask for their name and company\n' +
-    '- When they show interest, ask for email or phone\n' +
-    '- When you collect contact info, add this exact tag: [LEAD:name="X",email="X",phone="X",company="X",need="X"]\n' +
-    '- Example: "Perfect! A Zyoin expert will reach out within 24 hours. [LEAD:name="Rahul",email="rahul@tcs.com",phone="",company="TCS",need="leadership hiring"]"';
+    '- After 2-3 messages, when the user shows interest or asks about a service, end your reply with the tag [SHOW_FORM]\n' +
+    '- Do NOT ask for details conversationally — the form will handle collection\n' +
+    '- Example: "Great choice! Zyoin\'s permanent hiring covers all levels with a 95%+ retention rate. Let me pull up a quick form so our team can reach out to you. [SHOW_FORM]"\n' +
+    '- After the form is submitted, the user\'s details will appear in chat. Thank them warmly and confirm a consultant will reach out within 24 hours.';
 
   // ── STATE ─────────────────────────────────────────────────────
-  var history  = [];
-  var lead     = { name: '', email: '', phone: '', company: '', need: '' };
-  var leadSent = false;
-  var open     = false;
-  var busy     = false;
+  var history   = [];
+  var lead      = { name: '', email: '', phone: '', company: '', need: '' };
+  var leadSent  = false;
+  var formShown = false;
+  var open      = false;
+  var busy      = false;
 
   // ── SEND LEAD TO PROXY ────────────────────────────────────────
-  function sendLead() {
-    if (leadSent || !lead.email) return;
+  function sendLead(data) {
+    if (leadSent) return;
     leadSent = true;
-    var body = JSON.stringify({
-      action:  'lead',
-      name:    lead.name,
-      email:   lead.email,
-      phone:   lead.phone,
-      company: lead.company,
-      need:    lead.need,
-      page:    window.location.pathname,
-      time:    new Date().toISOString()
-    });
-    // Fire-and-forget — we don't need the response for a lead save
     fetch(PROXY, {
       method:   'POST',
       redirect: 'follow',
-      body:     body
-    }).catch(function () {}); // silently ignore network errors here
+      body: JSON.stringify({
+        action:  'lead',
+        name:    data.name    || '',
+        email:   data.email   || '',
+        phone:   data.phone   || '',
+        company: data.company || '',
+        need:    data.need    || lead.need || '',
+        page:    window.location.pathname,
+        time:    new Date().toISOString()
+      })
+    }).catch(function () {});
   }
 
-  // ── CALL PROXY (fetch fixes the CORS/redirect issue) ──────────
+  // ── CALL PROXY ────────────────────────────────────────────────
   function chat(text, onDone) {
     history.push({ role: 'user', content: text });
 
-    var body = JSON.stringify({
-      action:  'chat',
-      message: text,
-      history: history.slice(0, -1),
-      system:  SYSTEM,
-      page:    window.location.pathname
-    });
-
     fetch(PROXY, {
       method:   'POST',
-      redirect: 'follow',          // ← key fix: follow the Apps Script 302
-      body:     body               // no custom Content-Type → no CORS preflight
+      redirect: 'follow',
+      body: JSON.stringify({
+        action:  'chat',
+        message: text,
+        history: history.slice(0, -1),
+        system:  SYSTEM,
+        page:    window.location.pathname
+      })
     })
       .then(function (res) {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (!res.ok) throw new Error('API error ' + res.status);
         return res.text();
       })
       .then(function (raw) {
@@ -105,24 +102,17 @@
         if (d.error) throw new Error(d.error);
         var reply = d.reply || '';
 
-        // Parse lead tag
-        var lm = reply.match(/\[LEAD:([^\]]+)\]/);
-        if (lm) {
-          (lm[1].match(/(\w+)="([^"]*)"/g) || []).forEach(function (p) {
-            var m = p.match(/(\w+)="([^"]*)"/);
-            if (m && lead.hasOwnProperty(m[1])) lead[m[1]] = m[2];
-          });
-          sendLead();
-        }
+        // Check for form trigger tag
+        var triggerForm = /\[SHOW_FORM\]/i.test(reply);
+        var clean       = reply.replace(/\[SHOW_FORM\]/gi, '').trim();
 
-        var clean = reply.replace(/\[LEAD:[^\]]*\]/g, '').trim();
         history.push({ role: 'assistant', content: clean });
-        onDone(clean, false);
+        onDone(clean, false, triggerForm);
       })
       .catch(function (err) {
         history.pop();
         console.error('[Zara] fetch error:', err);
-        onDone('Sorry, something went wrong. Please try again or email us at info@zyoin.com', true);
+        onDone('Sorry, something went wrong. Please try again or email us at info@zyoin.com', true, false);
       });
   }
 
@@ -132,13 +122,13 @@
     var s = document.createElement('style');
     s.id = 'zara-css';
     s.textContent =
-      '@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700&display=swap");' +
+      '@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap");' +
 
       // Pulse
       '#zara-pulse{position:fixed;bottom:28px;right:28px;z-index:99994;width:56px;height:56px;border-radius:50%;background:rgba(255,114,0,.25);animation:zaraPulse 2s ease-out infinite;pointer-events:none}' +
       '@keyframes zaraPulse{0%{transform:scale(1);opacity:.8}100%{transform:scale(1.8);opacity:0}}' +
 
-      // Launcher
+      // Launcher button
       '#zara-btn{position:fixed;bottom:28px;right:28px;z-index:99996;width:56px;height:56px;border-radius:50%;background:#ff7200;border:none;cursor:pointer;box-shadow:0 4px 24px rgba(255,114,0,.5);transition:transform .2s,box-shadow .2s;display:flex;align-items:center;justify-content:center}' +
       '#zara-btn:hover{transform:scale(1.08);box-shadow:0 6px 32px rgba(255,114,0,.65)}' +
       '#zara-btn .ico-close{display:none}' +
@@ -150,8 +140,8 @@
       '#zara-badge::after{content:"";position:absolute;bottom:-6px;right:18px;width:12px;height:12px;background:#fff;transform:rotate(45deg);box-shadow:2px 2px 5px rgba(0,0,0,.06)}' +
       '@keyframes zaraFade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}' +
 
-      // Window
-      '#zara-win{position:fixed;bottom:96px;right:28px;z-index:99995;width:360px;height:530px;background:#0f0f14;border-radius:22px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.55);transform:scale(.93) translateY(24px);opacity:0;pointer-events:none;transition:transform .35s cubic-bezier(.34,1.4,.64,1),opacity .25s ease;font-family:"Plus Jakarta Sans",sans-serif}' +
+      // Chat window
+      '#zara-win{position:fixed;bottom:96px;right:28px;z-index:99995;width:360px;height:540px;background:#0f0f14;border-radius:22px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.55);transform:scale(.93) translateY(24px);opacity:0;pointer-events:none;transition:transform .35s cubic-bezier(.34,1.4,.64,1),opacity .25s ease;font-family:"Plus Jakarta Sans",sans-serif}' +
       '#zara-win.on{transform:scale(1) translateY(0);opacity:1;pointer-events:all}' +
 
       // Header
@@ -178,7 +168,7 @@
       '.zm-t{font-size:10px;color:rgba(255,255,255,.2);padding:0 4px}' +
       '.zm.u .zm-t{text-align:right}' +
 
-      // Typing
+      // Typing dots
       '#zara-typing{align-self:flex-start;background:#1e1e2c;border-radius:15px;border-bottom-left-radius:4px;padding:11px 15px;display:none;gap:4px;align-items:center}' +
       '#zara-typing.on{display:flex}' +
       '.zt{width:6px;height:6px;background:rgba(255,255,255,.35);border-radius:50%;animation:zaraJump .8s infinite}' +
@@ -191,7 +181,7 @@
       '.zq{background:transparent;border:1px solid rgba(255,114,0,.45);color:#ff9500;border-radius:20px;padding:5px 12px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:"Plus Jakarta Sans",sans-serif;transition:all .15s}' +
       '.zq:hover{background:#ff7200;color:#fff;border-color:#ff7200}' +
 
-      // Input
+      // Input area
       '#zara-foot{padding:10px 12px;border-top:1px solid rgba(255,255,255,.05);display:flex;gap:9px;align-items:flex-end}' +
       '#zara-in{flex:1;background:#1e1e2c;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:10px 13px;color:#e0e0e0;font-size:12.5px;font-family:"Plus Jakarta Sans",sans-serif;resize:none;outline:none;max-height:80px;line-height:1.5;transition:border-color .2s}' +
       '#zara-in::placeholder{color:rgba(255,255,255,.22)}' +
@@ -200,8 +190,23 @@
       '#zara-send:hover{background:#e86800;transform:scale(1.05)}' +
       '#zara-send:disabled{background:#2a2a35;cursor:not-allowed;transform:none}' +
 
+      // ── Lead form card ─────────────────────────────────────────
+      '.zara-form-card{align-self:flex-start;width:100%;max-width:98%;background:#18181f;border:1px solid rgba(255,114,0,.3);border-radius:16px;padding:14px 14px 12px;display:flex;flex-direction:column;gap:10px;animation:zaraFade .3s ease}' +
+      '.zara-form-title{font-size:11.5px;font-weight:700;color:#ff9500;text-transform:uppercase;letter-spacing:.6px}' +
+      '.zara-form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}' +
+      '.zara-field{display:flex;flex-direction:column;gap:4px}' +
+      '.zara-field label{font-size:10px;color:rgba(255,255,255,.38);font-weight:600;text-transform:uppercase;letter-spacing:.4px}' +
+      '.zara-field input{background:#0f0f14;border:1px solid rgba(255,255,255,.09);border-radius:9px;padding:8px 10px;color:#e0e0e0;font-size:12px;font-family:"Plus Jakarta Sans",sans-serif;outline:none;transition:border-color .2s;width:100%;box-sizing:border-box}' +
+      '.zara-field input:focus{border-color:rgba(255,114,0,.55)}' +
+      '.zara-field input::placeholder{color:rgba(255,255,255,.18)}' +
+      '.zara-field input:disabled{opacity:.5}' +
+      '.zara-submit{background:linear-gradient(135deg,#ff7200,#ff9500);border:none;border-radius:10px;padding:10px;color:#fff;font-size:12.5px;font-weight:700;font-family:"Plus Jakarta Sans",sans-serif;cursor:pointer;transition:opacity .15s;letter-spacing:.2px}' +
+      '.zara-submit:hover{opacity:.9}' +
+      '.zara-submit:disabled{background:#2a2a35;cursor:not-allowed;opacity:1}' +
+      '.zara-form-note{font-size:10px;color:rgba(255,255,255,.22);text-align:center}' +
+
       // Mobile
-      '@media(max-width:480px){#zara-win{width:calc(100vw - 20px);right:10px;bottom:76px;height:72vh;border-radius:18px}#zara-btn,#zara-pulse{bottom:14px;right:14px}#zara-badge{right:12px}}';
+      '@media(max-width:480px){#zara-win{width:calc(100vw - 20px);right:10px;bottom:76px;height:75vh;border-radius:18px}#zara-btn,#zara-pulse{bottom:14px;right:14px}#zara-badge{right:12px}.zara-form-row{grid-template-columns:1fr}}';
 
     document.head.appendChild(s);
   }
@@ -218,7 +223,7 @@
     var typing = document.getElementById('zara-typing');
     var div    = document.createElement('div');
     div.className = 'zm ' + who;
-    div.innerHTML  =
+    div.innerHTML =
       '<div class="zm-b' + (isErr ? ' err' : '') + '">' + text.replace(/\n/g, '<br>') + '</div>' +
       '<div class="zm-t">' + now() + '</div>';
     msgs.insertBefore(div, typing);
@@ -226,8 +231,7 @@
   }
 
   function showTyping() {
-    var t = document.getElementById('zara-typing');
-    t.classList.add('on');
+    document.getElementById('zara-typing').classList.add('on');
     document.getElementById('zara-msgs').scrollTop = 9999;
   }
 
@@ -240,13 +244,85 @@
     qr.innerHTML = '';
     (opts || []).forEach(function (o) {
       var b = document.createElement('button');
-      b.className = 'zq';
+      b.className   = 'zq';
       b.textContent = o;
       b.onclick = function () { qr.innerHTML = ''; send(o); };
       qr.appendChild(b);
     });
   }
 
+  // ── INLINE LEAD FORM ──────────────────────────────────────────
+  function showLeadForm(needHint) {
+    if (formShown) return;
+    formShown = true;
+
+    var msgs   = document.getElementById('zara-msgs');
+    var typing = document.getElementById('zara-typing');
+
+    var card = document.createElement('div');
+    card.className = 'zara-form-card';
+    card.innerHTML =
+      '<div class="zara-form-title">📋 Quick Details</div>' +
+      '<div class="zara-form-row">' +
+        '<div class="zara-field"><label>Full Name *</label><input id="zf-name" type="text" placeholder="Rahul Sharma" /></div>' +
+        '<div class="zara-field"><label>Company *</label><input id="zf-company" type="text" placeholder="Acme Corp" /></div>' +
+      '</div>' +
+      '<div class="zara-field"><label>Work Email *</label><input id="zf-email" type="email" placeholder="rahul@company.com" /></div>' +
+      '<div class="zara-field"><label>Phone (optional)</label><input id="zf-phone" type="tel" placeholder="+91 98765 43210" /></div>' +
+      '<button class="zara-submit" id="zf-submit">Connect me with Zyoin →</button>' +
+      '<div class="zara-form-note">🔒 No spam. A consultant will reach out within 24 hrs.</div>';
+
+    msgs.insertBefore(card, typing);
+    msgs.scrollTop = msgs.scrollHeight;
+
+    // Focus first field
+    setTimeout(function () {
+      var f = document.getElementById('zf-name');
+      if (f) f.focus();
+    }, 200);
+
+    document.getElementById('zf-submit').onclick = function () {
+      var name    = document.getElementById('zf-name').value.trim();
+      var company = document.getElementById('zf-company').value.trim();
+      var email   = document.getElementById('zf-email').value.trim();
+      var phone   = document.getElementById('zf-phone').value.trim();
+
+      if (!name || !email || !company) {
+        var btn = document.getElementById('zf-submit');
+        btn.textContent = '⚠️ Name, Company & Email are required';
+        setTimeout(function () { btn.textContent = 'Connect me with Zyoin →'; }, 2500);
+        return;
+      }
+
+      // Lock the form
+      card.querySelectorAll('input').forEach(function (i) { i.disabled = true; });
+      var submitBtn        = document.getElementById('zf-submit');
+      submitBtn.disabled   = true;
+      submitBtn.textContent = 'Sending…';
+
+      var formData = { name: name, company: company, email: email, phone: phone, need: needHint || '' };
+      sendLead(formData);
+
+      // Remove form, show user summary, trigger Claude reply
+      setTimeout(function () {
+        card.remove();
+        var summary = 'My details — Name: ' + name + ', Company: ' + company + ', Email: ' + email + (phone ? ', Phone: ' + phone : '') + '.';
+        addMsg(summary, 'u');
+        busy = true;
+        document.getElementById('zara-send').disabled = true;
+        showTyping();
+
+        chat(summary, function (reply, isErr) {
+          hideTyping();
+          busy  = false;
+          document.getElementById('zara-send').disabled = false;
+          addMsg(reply, 'b', isErr);
+        });
+      }, 350);
+    };
+  }
+
+  // ── SEND MESSAGE ──────────────────────────────────────────────
   function send(text) {
     if (!text || busy) return;
     var inp = document.getElementById('zara-in');
@@ -257,11 +333,12 @@
     document.getElementById('zara-send').disabled = true;
     showTyping();
 
-    chat(text, function (reply, isErr) {
+    chat(text, function (reply, isErr, triggerForm) {
       hideTyping();
-      busy = false;
+      busy  = false;
       document.getElementById('zara-send').disabled = false;
       addMsg(reply, 'b', isErr);
+      if (triggerForm) showLeadForm(text);
     });
   }
 
@@ -269,37 +346,33 @@
   function build() {
     css();
 
-    // Pulse
     var pulse = document.createElement('div');
-    pulse.id = 'zara-pulse';
+    pulse.id  = 'zara-pulse';
     document.body.appendChild(pulse);
 
-    // Badge
     var badge = document.createElement('div');
-    badge.id = 'zara-badge';
+    badge.id  = 'zara-badge';
     badge.innerHTML = '👋 Hi! Need help hiring? Ask Zara →';
     badge.onclick = function () { show(); badge.style.display = 'none'; };
     document.body.appendChild(badge);
     setTimeout(function () {
       if (badge.parentNode) {
         badge.style.transition = 'opacity .4s';
-        badge.style.opacity = '0';
+        badge.style.opacity    = '0';
         setTimeout(function () { badge.style.display = 'none'; }, 400);
       }
     }, 6000);
 
-    // Button
     var btn = document.createElement('button');
-    btn.id = 'zara-btn';
+    btn.id  = 'zara-btn';
     btn.innerHTML =
       '<svg class="ico-chat" width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
       '<svg class="ico-close" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>';
     btn.onclick = function () { open ? hide() : show(); };
     document.body.appendChild(btn);
 
-    // Window
     var win = document.createElement('div');
-    win.id = 'zara-win';
+    win.id  = 'zara-win';
     win.innerHTML =
       '<div id="zara-hd">' +
         '<div id="zara-av">⚡</div>' +
@@ -326,10 +399,12 @@
     inp.onkeydown = function (e) {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(inp.value.trim()); }
     };
-    inp.oninput = function () { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 80) + 'px'; };
+    inp.oninput = function () {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 80) + 'px';
+    };
     document.getElementById('zara-send').onclick = function () { send(inp.value.trim()); };
 
-    // Greeting
     setTimeout(function () {
       addMsg('Hi there! 👋 I\'m Zara, Zyoin\'s AI hiring assistant. I can answer questions about our services, help you find the right hiring solution, and connect you with our team. What brings you to Zyoin today?', 'b');
       setQR(['Permanent Hiring', 'Leadership Hiring', 'Global Hiring', 'RPO / Outsourcing', 'All Services']);
@@ -351,7 +426,6 @@
     document.getElementById('zara-btn').classList.remove('on');
   }
 
-  // ── INIT ──────────────────────────────────────────────────────
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', build);
   } else {
