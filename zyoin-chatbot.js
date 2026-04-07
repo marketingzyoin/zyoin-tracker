@@ -1,47 +1,65 @@
 // ============================================================
 // ZYOIN CHATBOT — FRONTEND
+// Flow: Greeting → Service buttons → Zara reply → Form → Free chat
+// Auto-adapts: scrapes page content on load → injects into system prompt
 //
-// HOW TO ADD TO WEBFLOW:
-//    <script>
-//      window.ZYOIN_CONFIG = { chatbot: "YOUR_APPS_SCRIPT_WEB_APP_URL" };
-//    </script>
-//    <script src="https://cdn.jsdelivr.net/gh/marketingzyoin/zyoin-tracker@main/zyoin-chatbot.js" defer></script>
+// WEBFLOW FOOTER CODE:
+//   <script>
+//     window.ZYOIN_CONFIG = { chatbot: "YOUR_APPS_SCRIPT_WEB_APP_URL" };
+//   </script>
+//   <script src="https://cdn.jsdelivr.net/gh/marketingzyoin/zyoin-tracker@main/zyoin-chatbot.js" defer></script>
 // ============================================================
 
 (function () {
   'use strict';
 
   var PROXY = (window.ZYOIN_CONFIG && window.ZYOIN_CONFIG.chatbot) || '';
-  if (!PROXY) { console.warn('[Zara] No chatbot URL set in window.ZYOIN_CONFIG.chatbot'); return; }
+  if (!PROXY) { console.warn('[Zara] No chatbot URL set'); return; }
 
-  // ── SYSTEM PROMPT ─────────────────────────────────────────────
-  var SYSTEM =
-    'You are Zara, Zyoin Group\'s AI hiring assistant. Be warm, concise (2-4 sentences), and helpful.\n\n' +
-    'ABOUT ZYOIN:\n' +
-    'Zyoin Group is an AI-augmented recruitment company based in India with global reach.\n\n' +
-    'SERVICES:\n' +
-    '- Permanent Hiring: Full-time recruitment across all levels\n' +
-    '- Leadership Hiring: C-suite, VP, Director executive search\n' +
-    '- Global Hiring: International talent across US, UK, Europe, APAC\n' +
-    '- RPO: We become your recruitment team\n' +
-    '- Contract Hiring: Flexible workforce, short and long term\n' +
-    '- Managed Recruitment: Fully managed hiring campaigns\n' +
-    '- Talent Intelligence: Market mapping, salary benchmarking\n' +
-    '- Hire Meetups: Exclusive events with pre-screened talent\n' +
-    '- Payroll Processing: End-to-end payroll management\n' +
-    '- HR Outsourcing: Complete HR function outsourcing\n\n' +
-    'USPs: AI-augmented process, 40% faster time-to-hire, 95%+ retention at 6 months, Pan-India + global coverage, no placement no fee for permanent hiring.\n\n' +
-    'PRICING: Custom quotes only.\n\n' +
-    'IMPORTANT BEHAVIOUR:\n' +
-    '- The user has already told you what service they are interested in.\n' +
-    '- Give a brief, helpful 2-3 sentence overview of that service.\n' +
-    '- End with something like: "Let me get your details so our team can reach out with a tailored solution!"\n' +
-    '- Do NOT ask for their name, email, phone, or company — the form will collect it.\n' +
-    '- Do NOT use markdown bold (**text**) in your replies — plain text only.\n' +
-    '- After the form is submitted you will know their name. Greet them and confirm a consultant will reach out within 24 hours.';
+  // ── SCRAPE PAGE CONTENT (auto-adapts to website changes) ──────
+  function getPageContext() {
+    try {
+      // Clone body so we can strip unwanted elements safely
+      var clone = document.body.cloneNode(true);
+
+      // Remove script, style, svg, nav, footer, chatbot itself
+      ['script','style','svg','noscript','#zara-win','#zara-btn','#zara-badge','#zara-pulse'].forEach(function (sel) {
+        clone.querySelectorAll(sel).forEach(function (el) { el.remove(); });
+      });
+
+      // Collect text, collapse whitespace, limit to 3000 chars to keep prompt lean
+      var text = (clone.innerText || clone.textContent || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 3000);
+
+      return text;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // ── BUILD SYSTEM PROMPT (base + live page content) ────────────
+  function buildSystem() {
+    var pageCtx = getPageContext();
+    return (
+      'You are Zara, Zyoin Group\'s AI hiring assistant. Be warm, concise (2-4 sentences), and helpful.\n\n' +
+      'CORE RULES:\n' +
+      '- Never use markdown bold (**text**) — plain text only.\n' +
+      '- Do NOT ask for the user\'s name, email, phone, or company — a form collects that.\n' +
+      '- After the form is submitted you will receive their details in a message. Thank them warmly and confirm a consultant reaches out within 24 hours.\n' +
+      '- When the user picks a service, give a brief 2-3 sentence overview, then end with something like: "Let me pull up a quick form so our team can reach out with a tailored solution!"\n' +
+      '- For pricing questions, always say: "We provide custom quotes — a Zyoin consultant will share the details once they reach out."\n' +
+      '- If you don\'t know something specific, say: "Our team will have the full details for you — they\'ll reach out within 24 hours."\n\n' +
+      'CURRENT PAGE CONTENT (live from zyoin.com — use this as your knowledge base):\n' +
+      '"""\n' + (pageCtx || 'No page content available.') + '\n"""\n\n' +
+      'Use the page content above to answer questions accurately. If the website is updated, your answers will reflect those updates automatically.'
+    );
+  }
 
   // ── STATE ─────────────────────────────────────────────────────
   var history  = [];
+  var SYSTEM   = '';        // built on first use
   var leadSent = false;
   var formDone = false;
   var open     = false;
@@ -57,20 +75,22 @@
       body: JSON.stringify({
         action: 'lead', name: data.name, email: data.email,
         phone: data.phone, company: data.company, need: data.need || userNeed,
-        page: window.location.pathname, time: new Date().toISOString()
+        page: window.location.href, time: new Date().toISOString()
       })
     }).catch(function () {});
   }
 
   // ── CHAT ──────────────────────────────────────────────────────
   function chat(text, onDone) {
+    if (!SYSTEM) SYSTEM = buildSystem();   // build once per session
     history.push({ role: 'user', content: text });
     fetch(PROXY, {
       method: 'POST', redirect: 'follow',
       body: JSON.stringify({
         action: 'chat', message: text,
-        history: history.slice(0, -1), system: SYSTEM,
-        page: window.location.pathname
+        history: history.slice(0, -1),
+        system: SYSTEM,
+        page: window.location.href
       })
     })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
@@ -152,7 +172,7 @@
       '#zara-send:hover{background:#e86800;transform:scale(1.05)}' +
       '#zara-send:disabled{background:#2a2a35;cursor:not-allowed;transform:none}' +
 
-      // ── Form card ─────────────────────────────────────────────
+      // ── Form card ──────────────────────────────────────────────
       '.zf-card{align-self:stretch;background:#18181f;border:1px solid rgba(255,114,0,.28);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;animation:zaraFade .3s ease}' +
       '.zf-title{font-size:12px;font-weight:700;color:#ff9500;letter-spacing:.5px;text-transform:uppercase}' +
       '.zf-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}' +
@@ -204,19 +224,21 @@
     });
   }
 
-  // ── STEP 1: user picks a service → Zara replies → form appears ─
+  // ── STEP 1: service selected → Zara replies → form appears ────
   function onServiceClick(service) {
     userNeed = service;
     addMsg(service, 'u');
     busy = true;
-    document.getElementById('zara-send').disabled = true;
     showTyping();
+
+    // Build system prompt now (captures current page content)
+    SYSTEM = buildSystem();
 
     chat(service, function (reply, isErr) {
       hideTyping();
+      busy = false;
       addMsg(reply, 'b', isErr);
-      // Show the form right after Zara's reply
-      setTimeout(showLeadForm, 300);
+      if (!isErr) setTimeout(showLeadForm, 350);
     });
   }
 
@@ -265,18 +287,21 @@
         card.remove();
         formDone = true;
 
-        // Unlock chat input
-        document.getElementById('zara-in').disabled   = false;
+        // Unlock chat
+        var inp = document.getElementById('zara-in');
+        inp.disabled = false;
+        inp.placeholder = 'Ask me anything about hiring...';
         document.getElementById('zara-send').disabled = false;
-        document.getElementById('zara-in').placeholder = 'Ask me anything about hiring...';
 
-        // Zara thanks them and continues
-        var summary = 'Form submitted. My name is ' + name + ', company is ' + company + ', email is ' + email + (phone ? ', phone is ' + phone : '') + ', interested in ' + userNeed + '.';
+        // Tell Zara the form is done so she can respond naturally
+        var summary = 'Form submitted. Name: ' + name + ', Company: ' + company +
+          ', Email: ' + email + (phone ? ', Phone: ' + phone : '') +
+          ', Interested in: ' + userNeed + '.';
         busy = true;
         showTyping();
         chat(summary, function (reply, isErr) {
           hideTyping();
-          busy  = false;
+          busy = false;
           document.getElementById('zara-send').disabled = false;
           addMsg(reply, 'b', isErr);
         });
@@ -297,7 +322,7 @@
 
     chat(text, function (reply, isErr) {
       hideTyping();
-      busy  = false;
+      busy = false;
       document.getElementById('zara-send').disabled = false;
       addMsg(reply, 'b', isErr);
     });
@@ -314,7 +339,10 @@
     badge.onclick = function () { show(); badge.style.display = 'none'; };
     document.body.appendChild(badge);
     setTimeout(function () {
-      if (badge.parentNode) { badge.style.transition = 'opacity .4s'; badge.style.opacity = '0'; setTimeout(function () { badge.style.display = 'none'; }, 400); }
+      if (badge.parentNode) {
+        badge.style.transition = 'opacity .4s'; badge.style.opacity = '0';
+        setTimeout(function () { badge.style.display = 'none'; }, 400);
+      }
     }, 6000);
 
     var btn = document.createElement('button'); btn.id = 'zara-btn';
@@ -328,14 +356,16 @@
     win.innerHTML =
       '<div id="zara-hd">' +
         '<div id="zara-av">⚡</div>' +
-        '<div><div id="zara-hd-name">Zara · Zyoin AI</div>' +
-        '<div id="zara-hd-status"><span id="zara-dot"></span>Online · replies instantly</div></div>' +
+        '<div>' +
+          '<div id="zara-hd-name">Zara · Zyoin AI</div>' +
+          '<div id="zara-hd-status"><span id="zara-dot"></span>Online · replies instantly</div>' +
+        '</div>' +
         '<button id="zara-x">✕</button>' +
       '</div>' +
       '<div id="zara-msgs"><div id="zara-typing"><div class="zt"></div><div class="zt"></div><div class="zt"></div></div></div>' +
       '<div id="zara-qr"></div>' +
       '<div id="zara-foot">' +
-        '<textarea id="zara-in" rows="1" placeholder="Select what you\'re looking for above..." disabled></textarea>' +
+        '<textarea id="zara-in" rows="1" placeholder="Select a service above to get started..." disabled></textarea>' +
         '<button id="zara-send" disabled>' +
           '<svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
         '</button>' +
@@ -348,7 +378,7 @@
     inp.oninput   = function () { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 80) + 'px'; };
     document.getElementById('zara-send').onclick = function () { send(inp.value.trim()); };
 
-    // Greeting + quick replies immediately
+    // Greeting + service buttons
     setTimeout(function () {
       addMsg('Hi there! 👋 I\'m Zara, Zyoin\'s AI hiring assistant. What are you looking for today?', 'b');
       setQR(['Permanent Hiring', 'Leadership Hiring', 'Global Hiring', 'RPO / Outsourcing', 'Contract Hiring', 'All Services']);
