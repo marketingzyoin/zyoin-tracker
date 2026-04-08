@@ -1,7 +1,6 @@
 // ============================================================
 // ZYOIN CHATBOT — FRONTEND v5
 //
-// FLOW:
 // 1. Two tabs: "I'm Hiring" / "Looking for a Job"
 // 2. Job seekers → warm message + redirect button to Contact Us
 // 3. Hiring → service buttons + free chat → after 2-3 messages form appears
