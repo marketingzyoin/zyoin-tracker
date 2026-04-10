@@ -100,7 +100,11 @@
         utm_campaign: UTM.campaign || '',
         utm_term:     UTM.term     || '',
         utm_content:  UTM.content  || '',
-        referrer:     UTM.referrer || ''
+        referrer:     UTM.referrer || '',
+        conversation: history
+          .filter(function (m) { return m.content && m.content.indexOf('Form submitted.') === -1; })
+          .map(function (m) { return (m.role === 'user' ? 'Visitor: ' : 'Zara: ') + m.content; })
+          .join('\n')
       })
     }).catch(function () {});
   }
@@ -271,12 +275,12 @@
     var typing = document.getElementById('zara-typing');
     var msg = document.createElement('div');
     msg.className = 'zm b';
-    msg.innerHTML = '<div class="zm-b">We would love to help you find your next role! 🚀 Our team connects talented professionals with top companies across India and globally. Head over to our Contact Us page and someone will reach out to match you with the right opportunity.</div><div class="zm-t">' + now() + '</div>';
+    msg.innerHTML = '<div class="zm-b">We\'d love to help you find your next role! 🚀 Our team connects talented professionals with top companies across India and globally. Head over to our Contact Us page and someone will reach out to match you with the right opportunity.</div><div class="zm-t">' + now() + '</div>';
     msgs.insertBefore(msg, typing);
     var link = document.createElement('a');
     link.className = 'zara-cta';
     link.href = CONTACT_URL;
-    link.textContent = 'Go to Contact Us';
+    link.textContent = 'Go to Contact Us →';
     msgs.insertBefore(link, typing);
     msgs.scrollTop = msgs.scrollHeight;
   }
@@ -331,7 +335,7 @@
       '</div>' +
       '<div class="zf-field"><label>Work Email *</label><input id="zf-email" type="email" placeholder="rahul@company.com" /></div>' +
       '<div class="zf-field"><label>Phone *</label><input id="zf-phone" type="tel" placeholder="+91 98765 43210" /></div>' +
-      '<button class="zf-btn" id="zf-submit">Connect me with Zyoin</button>' +
+      '<button class="zf-btn" id="zf-submit">Connect me with Zyoin →</button>' +
       '<div class="zf-note">🔒 No spam. A consultant will reach out within 24 hrs.</div>';
     msgs.insertBefore(card, typing);
     msgs.scrollTop = msgs.scrollHeight;
@@ -356,7 +360,7 @@
       if (!valid) {
         var sbtn = document.getElementById('zf-submit');
         sbtn.textContent = '⚠️ All fields are required';
-        setTimeout(function () { sbtn.textContent = 'Connect me with Zyoin'; }, 2500);
+        setTimeout(function () { sbtn.textContent = 'Connect me with Zyoin →'; }, 2500);
         return;
       }
       var name    = fields.name.value.trim();
@@ -397,7 +401,7 @@
     css();
     var pulse = document.createElement('div'); pulse.id = 'zara-pulse'; document.body.appendChild(pulse);
     var badge = document.createElement('div'); badge.id = 'zara-badge';
-    badge.innerHTML = '👋 Hiring or job hunting? Ask Zara';
+    badge.innerHTML = '👋 Hiring or job hunting? Ask Zara →';
     badge.onclick = function () { show(); badge.style.display = 'none'; };
     document.body.appendChild(badge);
     setTimeout(function () {
@@ -414,7 +418,7 @@
     document.body.appendChild(btn);
     var win = document.createElement('div'); win.id = 'zara-win';
     win.innerHTML =
-      '<div id="zara-hd"><div id="zara-av">&#9889;</div><div><div id="zara-hd-name">Zara &middot; Zyoin AI</div><div id="zara-hd-status"><span id="zara-dot"></span>Online &middot; replies instantly</div></div><button id="zara-x">&#10005;</button></div>' +
+      '<div id="zara-hd"><div id="zara-av">⚡</div><div><div id="zara-hd-name">Zara · Zyoin AI</div><div id="zara-hd-status"><span id="zara-dot"></span>Online · replies instantly</div></div><button id="zara-x">✕</button></div>' +
       '<div id="zara-msgs"><div id="zara-typing"><div class="zt"></div><div class="zt"></div><div class="zt"></div></div></div>' +
       '<div id="zara-qr"></div>' +
       '<div id="zara-foot"><textarea id="zara-in" rows="1" placeholder="Ask me anything or pick an option above..."></textarea><button id="zara-send"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>';
@@ -425,7 +429,7 @@
     inp.oninput = function () { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 80) + 'px'; };
     document.getElementById('zara-send').onclick = function () { send(inp.value.trim()); };
     setTimeout(function () {
-      addMsg('Hi there!👋 I\'m Zara, Zyoin\'s AI assistant. Are you looking to hire, or are you a job seeker?', 'b');
+      addMsg('Hi there! 👋 I\'m Zara, Zyoin\'s AI assistant. Are you looking to hire, or are you a job seeker?', 'b');
       showIntentButtons();
     }, 200);
   }
