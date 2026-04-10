@@ -255,10 +255,10 @@
     var qr = document.getElementById('zara-qr');
     qr.innerHTML = '';
     var hiring = document.createElement('button');
-    hiring.className = 'zq intent'; hiring.textContent = 'I am Hiring';
+    hiring.className = 'zq intent'; hiring.textContent = '🏢 I\'m Hiring';
     hiring.onclick = function () { qr.innerHTML = ''; onHiring(); };
     var seeker = document.createElement('button');
-    seeker.className = 'zq intent'; seeker.textContent = 'Looking for a Job';
+    seeker.className = 'zq intent'; seeker.textContent = '👤 Looking for a Job';
     seeker.onclick = function () { qr.innerHTML = ''; onJobSeeker(); };
     qr.appendChild(hiring);
     qr.appendChild(seeker);
@@ -271,7 +271,7 @@
     var typing = document.getElementById('zara-typing');
     var msg = document.createElement('div');
     msg.className = 'zm b';
-    msg.innerHTML = '<div class="zm-b">We would love to help you find your next role! Our team connects talented professionals with top companies across India and globally. Head over to our Contact Us page and someone will reach out to match you with the right opportunity.</div><div class="zm-t">' + now() + '</div>';
+    msg.innerHTML = '<div class="zm-b">We would love to help you find your next role! 🚀 Our team connects talented professionals with top companies across India and globally. Head over to our Contact Us page and someone will reach out to match you with the right opportunity.</div><div class="zm-t">' + now() + '</div>';
     msgs.insertBefore(msg, typing);
     var link = document.createElement('a');
     link.className = 'zara-cta';
@@ -324,7 +324,7 @@
     var card = document.createElement('div');
     card.className = 'zf-card';
     card.innerHTML =
-      '<div class="zf-title">Your Details</div>' +
+      '<div class="zf-title">📋 Your Details</div>' +
       '<div class="zf-row">' +
         '<div class="zf-field"><label>Full Name *</label><input id="zf-name" type="text" placeholder="Rahul Sharma" /></div>' +
         '<div class="zf-field"><label>Company *</label><input id="zf-company" type="text" placeholder="Acme Corp" /></div>' +
@@ -332,7 +332,7 @@
       '<div class="zf-field"><label>Work Email *</label><input id="zf-email" type="email" placeholder="rahul@company.com" /></div>' +
       '<div class="zf-field"><label>Phone *</label><input id="zf-phone" type="tel" placeholder="+91 98765 43210" /></div>' +
       '<button class="zf-btn" id="zf-submit">Connect me with Zyoin</button>' +
-      '<div class="zf-note">No spam. A consultant will reach out within 24 hrs.</div>';
+      '<div class="zf-note">🔒 No spam. A consultant will reach out within 24 hrs.</div>';
     msgs.insertBefore(card, typing);
     msgs.scrollTop = msgs.scrollHeight;
     setTimeout(function () { var f = document.getElementById('zf-name'); if (f) f.focus(); }, 150);
@@ -355,7 +355,7 @@
       }
       if (!valid) {
         var sbtn = document.getElementById('zf-submit');
-        sbtn.textContent = 'All fields are required';
+        sbtn.textContent = '⚠️ All fields are required';
         setTimeout(function () { sbtn.textContent = 'Connect me with Zyoin'; }, 2500);
         return;
       }
@@ -397,7 +397,7 @@
     css();
     var pulse = document.createElement('div'); pulse.id = 'zara-pulse'; document.body.appendChild(pulse);
     var badge = document.createElement('div'); badge.id = 'zara-badge';
-    badge.innerHTML = 'Hiring or job hunting? Ask Zara';
+    badge.innerHTML = '👋 Hiring or job hunting? Ask Zara';
     badge.onclick = function () { show(); badge.style.display = 'none'; };
     document.body.appendChild(badge);
     setTimeout(function () {
@@ -425,7 +425,7 @@
     inp.oninput = function () { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 80) + 'px'; };
     document.getElementById('zara-send').onclick = function () { send(inp.value.trim()); };
     setTimeout(function () {
-      addMsg('Hi there! I\'m Zara, Zyoin\'s AI assistant. Are you looking to hire, or are you a job seeker?', 'b');
+      addMsg('Hi there!👋 I\'m Zara, Zyoin\'s AI assistant. Are you looking to hire, or are you a job seeker?', 'b');
       showIntentButtons();
     }, 200);
   }
